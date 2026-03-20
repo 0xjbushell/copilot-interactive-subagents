@@ -2,6 +2,12 @@
 
 This project exposes a generic orchestration layer. Agent Skills should add workflow-specific planning and prompts **outside** the extension, then call the namespaced tools below with exact agent identifiers and plain task text.
 
+If you want a ready-made project skill that teaches agents how to use this extension, start with:
+
+```text
+.github/skills/using-copilot-interactive-subagents/SKILL.md
+```
+
 ## Generic tool contract
 
 ### `copilot_subagent_list_agents`

@@ -552,4 +552,12 @@ These were used to validate the implementation along with real interactive Copil
 
 ## Agent Skill integration
 
-See `docs/skills-integration.md` for Agent Skill-oriented examples and handoff guidance.
+This repository now includes a starter project skill at:
+
+```text
+.github/skills/using-copilot-interactive-subagents/SKILL.md
+```
+
+Use it as the default guide for agents that need to delegate through the extension.
+
+See `docs/skills-integration.md` for lower-level tool examples and handoff guidance.
