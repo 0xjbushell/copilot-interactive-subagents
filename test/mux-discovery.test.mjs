@@ -353,4 +353,87 @@ describe("mux discovery and launch prerequisites", () => {
       await rm(tempPath, { recursive: true, force: true });
     }
   });
+
+  it("GIVEN attached zellij env vars and a zellij binary WHEN the default list-agents path runs THEN zellij is reported as an attached supported backend", async () => {
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const handlers = await createExtensionHandlers({
+      listRuntimeAgents: async () => ({
+        runtimeRecognizedIdentifiers: ["reviewer"],
+        builtInIdentifiersAcceptedExplicitly: ["github-copilot"],
+        exactNameOnly: true,
+      }),
+    });
+
+    const result = await handlers.copilotSubagentListAgents({
+      env: {
+        ZELLIJ: "0",
+        ZELLIJ_PANE_ID: "0",
+        ZELLIJ_SESSION_NAME: "copilot-zellij-test",
+      },
+      hasCommand: (command) => command === "zellij",
+    });
+
+    assert.deepEqual(result.supportedBackends, [
+      {
+        backend: "zellij",
+        source: "attached",
+        attachable: true,
+        startSupported: false,
+      },
+    ]);
+  });
+
+  it("GIVEN attached zellij env vars but no zellij binary WHEN the default list-agents path runs THEN zellij is not reported as an attached supported backend", async () => {
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const handlers = await createExtensionHandlers({
+      listRuntimeAgents: async () => ({
+        runtimeRecognizedIdentifiers: ["reviewer"],
+        builtInIdentifiersAcceptedExplicitly: ["github-copilot"],
+        exactNameOnly: true,
+      }),
+    });
+
+    const result = await handlers.copilotSubagentListAgents({
+      env: {
+        ZELLIJ: "0",
+        ZELLIJ_PANE_ID: "0",
+        ZELLIJ_SESSION_NAME: "copilot-zellij-test",
+      },
+      hasCommand: () => false,
+    });
+
+    assert.deepEqual(result.supportedBackends, []);
+  });
+
+  it("GIVEN attached cmux env vars but no default cmux runtime support WHEN the default list-agents path runs THEN cmux is not reported as an attached supported backend", async () => {
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const handlers = await createExtensionHandlers({
+      listRuntimeAgents: async () => ({
+        runtimeRecognizedIdentifiers: ["reviewer"],
+        builtInIdentifiersAcceptedExplicitly: ["github-copilot"],
+        exactNameOnly: true,
+      }),
+    });
+
+    const result = await handlers.copilotSubagentListAgents({
+      env: {
+        CMUX_SOCKET_PATH: "/tmp/cmux.sock",
+      },
+      hasCommand: (command) => command === "cmux",
+    });
+
+    assert.deepEqual(result.supportedBackends, []);
+  });
 });

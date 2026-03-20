@@ -94,14 +94,22 @@ Current backend behavior:
   - default pane capture support
   - default title update support
   - live-validated in this project
+  - recommended default backend for most users
 - `cmux`
   - detection and backend selection support
   - default pane operations are not fully implemented without runtime adapters
 - `zellij`
-  - detection and backend selection support
-  - default pane operations are not fully implemented without runtime adapters
+  - attached detection
+  - default pane launch support
+  - default pane capture support
+  - live-validated in an attached `zellij` session in this project
+  - does not auto-start by default; use it from inside an existing `zellij` session
 
-So today, `tmux` is the production path with concrete end-to-end validation.
+So today:
+
+- `tmux` is the easiest production path because it can attach or auto-start
+- attached `zellij` is also a production-ready path in the validated environment
+- `cmux` still needs runtime adapters for full pane operations
 
 ### 4. Child launch model
 
@@ -121,6 +129,8 @@ __SUBAGENT_DONE_<exit_code>__
 ```
 
 The parent monitor watches for that sentinel to determine completion.
+
+The default monitored launch window is currently sized for real Copilot child turns rather than synthetic fast tests. In the validation environment used for this project, successful child turns took roughly `22s` to `34s`, so the shipped default monitor window is `60s`.
 
 ### 5. Persisted state and resume
 
@@ -219,13 +229,41 @@ If both exist with the same extension name:
 
 That makes it easy to keep a stable global install while testing a project-local version in one repository.
 
+## First-use quick start
+
+If you are new to the extension, this is the shortest path to a successful first run:
+
+1. Install the extension either:
+   - in the current repo under `.github/extensions/copilot-interactive-subagents/`, or
+   - globally under `~/.copilot/extensions/copilot-interactive-subagents/`
+2. Make sure you have a working pane backend:
+   - easiest path: install `tmux`
+   - optional attached path: install `zellij` and start Copilot from inside an existing `zellij` session
+3. Start Copilot CLI in **interactive mode** inside the repository where you want to use the extension.
+4. If Copilot CLI prompts you to trust the folder, approve it. If you preconfigure trust, add the repo to your Copilot CLI config under `~/.copilot/` before starting.
+5. First ask Copilot to use `copilot_subagent_list_agents` so you can see:
+   - the exact installed agent identifiers
+   - which backends are currently available
+6. Then launch one subagent with `copilot_subagent_launch`.
+
+Example natural-language prompts:
+
+- `Use copilot_subagent_list_agents and show me the exact available agent identifiers and supported backends.`
+- `Use copilot_subagent_launch with agentIdentifier "github-copilot", backend "tmux", awaitCompletion true, and task "Review the current diff and summarize risks."`
+- `Use copilot_subagent_launch with agentIdentifier "github-copilot", backend "zellij", awaitCompletion true, and task "Review the current diff and summarize risks."`
+
+If you are using `zellij`, run that last prompt from **inside an attached zellij session**.
+
 ## Recommended setup after installation
 
 1. Make sure the repo you are using is trusted by Copilot CLI.
 2. Start Copilot in interactive mode inside the repository.
-3. If possible, start Copilot from an attached `tmux` session.
-4. Call `copilot_subagent_list_agents` first to discover exact agent names.
+3. Choose a backend intentionally:
+   - `tmux` if you want the simplest path, including auto-start
+   - attached `zellij` if you already work inside `zellij`
+4. Call `copilot_subagent_list_agents` first to discover exact agent names and backend availability.
 5. Use those exact identifiers for launch or parallel launch.
+6. Prefer `awaitCompletion: true` when you want the parent session to monitor the child and return a structured final result.
 
 ## Verified host behavior
 
@@ -234,10 +272,12 @@ This project was verified in a real interactive Copilot CLI session.
 Verified:
 
 - extension loaded in interactive Copilot CLI
-- `copilot_subagent_launch` succeeded in a real session
+- `copilot_subagent_launch` succeeded in real `tmux` and attached `zellij` sessions
 - `tmux` auto-started when needed
-- a child Copilot pane completed successfully
-- the parent tool returned structured success
+- attached `zellij` launching succeeded when run from inside a real `zellij` session
+- child Copilot panes completed successfully in both validated backends
+- the parent tool returned structured success in both validated backends
+- real child turns during validation took roughly `22s` to `34s`
 
 Important host-mode note:
 
@@ -470,6 +510,7 @@ Result:
 - unsupported backend values are rejected during resume
 - child launch commands avoid unsafe shell interpolation by passing values through encoded environment variables
 - project-local index writes are best-effort and cannot override the authoritative workspace manifest
+- monitored launches default to a `60s` watch window so real child turns do not time out prematurely in normal use
 
 ## Stable failure codes
 
@@ -490,8 +531,9 @@ Common machine-readable codes include:
 
 ## Limitations
 
-- `tmux` is the only backend with default pane operations that were fully implemented and live-validated here
-- `cmux` and `zellij` currently need runtime adapters for full pane operations
+- `tmux` and attached `zellij` are the default-runtime backends that were live-validated here
+- `cmux` still needs runtime adapters for full pane operations
+- `zellij` is an attached-session path, not a default auto-start path
 - prompt-mode extension availability may depend on Copilot CLI host behavior; interactive mode is the validated path
 - parallel write-heavy tasks are not serialized for you; avoid overlapping writes in one checkout unless your workflow isolates them
 
@@ -506,7 +548,7 @@ npm run test:crap
 npm run test:mutation
 ```
 
-These were used to validate the implementation along with a real interactive Copilot CLI plus `tmux` end-to-end run.
+These were used to validate the implementation along with real interactive Copilot CLI end-to-end runs in `tmux` and attached `zellij`.
 
 ## Agent Skill integration
 

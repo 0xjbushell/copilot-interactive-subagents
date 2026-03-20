@@ -9,6 +9,8 @@ import {
 import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
 import { extractLaunchSummary, waitForLaunchCompletion } from "./summary.mjs";
 
+const DEFAULT_MONITOR_ATTEMPTS = 120;
+
 function normalizeExitCode(value, fallback = 1) {
   if (value === null || value === undefined) {
     return fallback;
@@ -267,7 +269,7 @@ async function runChildLaunch({
     agentIdentifier: plan.agentIdentifier,
     readPaneOutput,
     readChildSessionState,
-    maxAttempts: request.maxMonitorAttempts ?? 25,
+    maxAttempts: request.maxMonitorAttempts ?? DEFAULT_MONITOR_ATTEMPTS,
     pollIntervalMs: request.pollIntervalMs ?? 500,
     sleep: request.sleep,
     request,

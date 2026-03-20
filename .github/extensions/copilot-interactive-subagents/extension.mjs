@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { access, constants as fsConstants } from "node:fs/promises";
+import { access, constants as fsConstants, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -299,6 +300,19 @@ function supportedRuntimeBackends(request = {}) {
   };
 }
 
+function isAttachedBackend(backend, env = {}) {
+  switch (backend) {
+    case "cmux":
+      return Boolean(env.CMUX_SOCKET_PATH);
+    case "tmux":
+      return Boolean(env.TMUX);
+    case "zellij":
+      return Boolean(env.ZELLIJ || env.ZELLIJ_SESSION_NAME);
+    default:
+      return false;
+  }
+}
+
 function sanitizeBackendEnvironment(env = {}, runtimeSupport = {}) {
   const sanitized = { ...env };
 
@@ -306,7 +320,7 @@ function sanitizeBackendEnvironment(env = {}, runtimeSupport = {}) {
     delete sanitized.CMUX_SOCKET_PATH;
   }
 
-  if (!runtimeSupport.zellij) {
+  if (!runtimeSupport.zellij && !isAttachedBackend("zellij", env)) {
     delete sanitized.ZELLIJ;
     delete sanitized.ZELLIJ_SESSION_NAME;
   }
@@ -655,17 +669,23 @@ function resolveLaunchRuntimeOperation(request = {}, _runtimeServices = {}, back
 
 async function runDefaultBackendCommand({ request, runtimeServices = {}, backend, args }) {
   const runner = request.runBackendCommand ?? runtimeServices.runBackendCommand;
-  if (typeof runner === "function") {
-    return runner({ command: backend, args });
-  }
-
   const env = {
     ...process.env,
     ...(request.env ?? {}),
   };
+  for (const key of Object.keys(env)) {
+    if (env[key] == null) {
+      delete env[key];
+    }
+  }
+  const cwd = request.cwd ?? process.cwd();
+  if (typeof runner === "function") {
+    return runner({ command: backend, args, cwd, env, request });
+  }
+
   const command = (await resolveCommandPath(backend, env)) ?? backend;
   const { stdout = "", stderr = "" } = await execFileAsync(command, args, {
-    cwd: request.cwd ?? process.cwd(),
+    cwd,
     env,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
@@ -679,14 +699,78 @@ function defaultTmuxSessionName(request = {}) {
   return `copilot-subagents-${suffix || "session"}`.slice(0, 64);
 }
 
+function zellijPaneId(paneId) {
+  return String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
+}
+
+async function createPrivateTempFile(prefix, fileName) {
+  const directoryPath = await mkdtemp(path.join(tmpdir(), `${prefix}-`));
+  return {
+    directoryPath,
+    filePath: path.join(directoryPath, fileName),
+  };
+}
+
+async function waitForFileText(filePath, {
+  timeoutMs = 5000,
+  intervalMs = 25,
+} = {}) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const text = await readFile(filePath, "utf8");
+      if (text.trim()) {
+        return text;
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  const error = new Error(`Timed out waiting for zellij pane metadata at ${filePath}.`);
+  error.code = "LAUNCH_RUNTIME_UNAVAILABLE";
+  throw error;
+}
+
 function getPaneTarget(_backend, paneId) {
   return paneId;
 }
 
-function getPaneCaptureArgs(backend, paneId) {
+function withZellijPaneRequest(request = {}, paneId) {
+  if (!paneId) {
+    return request;
+  }
+
+  return {
+    ...request,
+    env: {
+      ...(request.env ?? {}),
+      ZELLIJ_PANE_ID: zellijPaneId(paneId),
+    },
+  };
+}
+
+function withoutZellijPaneRequest(request = {}) {
+  return {
+    ...request,
+    env: {
+      ...(request.env ?? {}),
+      ZELLIJ_PANE_ID: null,
+    },
+  };
+}
+
+function getPaneCaptureArgs(backend, paneId, outputPath) {
   switch (backend) {
     case "tmux":
       return ["capture-pane", "-p", "-t", paneId, "-S", "-200"];
+    case "zellij":
+      return ["action", "dump-screen", outputPath];
     default:
       throw createRuntimeUnavailableError("readPaneOutput", backend);
   }
@@ -702,6 +786,15 @@ function buildOpenPaneArgs(backend, context = {}) {
         "-P",
         "-F",
         "#{pane_id}",
+      ];
+    case "zellij":
+      return [
+        "action",
+        "new-pane",
+        "--direction",
+        "right",
+        "--name",
+        context.agentIdentifier ?? "copilot-subagent",
       ];
     default:
       throw createRuntimeUnavailableError("openPane", backend);
@@ -755,7 +848,34 @@ async function defaultOpenPane({ backend, request, runtimeServices = {}, ...cont
     backend,
     args: buildOpenPaneArgs(backend, context),
   });
-  const paneId = extractPaneId(result?.stdout);
+  let paneId = extractPaneId(result?.stdout);
+  if (backend === "zellij" && (!paneId || !/^pane:\d+$/.test(paneId))) {
+    const { directoryPath, filePath: paneIdPath } = await createPrivateTempFile(
+      "copilot-subagents-zellij-pane",
+      "pane-id.txt",
+    );
+    try {
+      await runDefaultBackendCommand({
+        request: withoutZellijPaneRequest(request),
+        runtimeServices,
+        backend,
+        args: ["action", "write-chars", `echo "$ZELLIJ_PANE_ID" > ${shellEscape(paneIdPath)}`],
+      });
+      await runDefaultBackendCommand({
+        request: withoutZellijPaneRequest(request),
+        runtimeServices,
+        backend,
+        args: ["action", "write", "13"],
+      });
+      const capturedPaneId = (await waitForFileText(paneIdPath)).trim();
+      if (capturedPaneId) {
+        paneId = `pane:${capturedPaneId}`;
+      }
+    } finally {
+      await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
+    }
+  }
+
   if (!paneId) {
     throw createRuntimeUnavailableError("openPane", backend);
   }
@@ -803,6 +923,22 @@ async function defaultLaunchAgentInPane({ backend, request, runtimeServices = {}
       return {
         sessionId: request.sessionId ?? null,
       };
+    case "zellij":
+      await runDefaultBackendCommand({
+        request: withZellijPaneRequest(request, context.paneId),
+        runtimeServices,
+        backend,
+        args: ["action", "write-chars", command],
+      });
+      await runDefaultBackendCommand({
+        request: withZellijPaneRequest(request, context.paneId),
+        runtimeServices,
+        backend,
+        args: ["action", "write", "13"],
+      });
+      return {
+        sessionId: request.sessionId ?? null,
+      };
     default:
       throw createRuntimeUnavailableError("launchAgentInPane", backend);
   }
@@ -817,6 +953,26 @@ async function defaultReadPaneOutput({ backend, request, runtimeServices = {}, .
   );
   if (readPaneOutput) {
     return readPaneOutput({ backend, request, ...context });
+  }
+
+  if (backend === "zellij") {
+    const { directoryPath, filePath: outputPath } = await createPrivateTempFile(
+      "copilot-subagents-zellij-screen",
+      "screen.txt",
+    );
+    const args = getPaneCaptureArgs(backend, context.paneId, outputPath);
+    try {
+      await runDefaultBackendCommand({
+        request: withZellijPaneRequest(request, context.paneId),
+        runtimeServices,
+        backend,
+        args,
+      });
+      const output = await readFile(outputPath, "utf8");
+      return { output };
+    } finally {
+      await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
+    }
   }
 
   return runDefaultBackendCommand({
@@ -859,11 +1015,13 @@ async function defaultDiscoverLaunchBackendsForRuntime(request = {}, runtimeServ
 }
 
 async function defaultAttachBackendForRuntime(backend) {
-  if (backend === "tmux") {
-    return {};
+  switch (backend) {
+    case "tmux":
+    case "zellij":
+      return {};
+    default:
+      throw createRuntimeUnavailableError("attach", backend);
   }
-
-  throw createRuntimeUnavailableError("attach", backend);
 }
 
 async function defaultStartBackendForRuntime(backend, request, runtimeServices = {}) {

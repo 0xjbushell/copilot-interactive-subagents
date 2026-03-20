@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -281,6 +281,101 @@ describe("single pane-backed launch orchestration", () => {
     assert.equal(result.summary, "Default-wired launch succeeded");
   });
 
+  it("GIVEN default monitor settings WHEN the child sentinel arrives after roughly half a minute of polling THEN launch still succeeds instead of timing out", async (t) => {
+    const workspacePath = await createWorkspace(t);
+    const { launchSingleSubagent } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+      ["launchSingleSubagent"],
+    );
+    const { createStateStore } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      ["createStateStore"],
+    );
+
+    const attempts = [];
+    const result = await launchSingleSubagent({
+      request: {
+        workspacePath,
+        task: "Wait for a slower child turn",
+        sleep: async () => {},
+      },
+      agentValidation: {
+        identifier: "github-copilot",
+        agentKind: "builtin",
+      },
+      backendResolution: {
+        selectedBackend: "tmux",
+        action: "attach",
+      },
+      services: {
+        stateStore: createStateStore({ workspacePath }),
+        openPane: async () => ({
+          paneId: "%33",
+          visible: true,
+        }),
+        launchAgentInPane: async () => ({
+          sessionId: "session-slower-child",
+        }),
+        readPaneOutput: async ({ attempt }) => {
+          attempts.push(attempt);
+
+          if (attempt < 64) {
+            return {
+              output: `assistant: still working (${attempt})`,
+            };
+          }
+
+          return {
+            output: "assistant: TMUX_E2E_OK\n__SUBAGENT_DONE_0__",
+          };
+        },
+      },
+    });
+
+    assert.equal(result.status, "success");
+    assert.equal(result.summary, "TMUX_E2E_OK");
+    assert.equal(result.exitCode, 0);
+    assert.equal(attempts.length, 65);
+  });
+
+  it("GIVEN an attached zellij backend WHEN the default launch path is used THEN explicit backend zellij resolves through attach instead of BACKEND_START_UNSUPPORTED", async () => {
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const handlers = await createExtensionHandlers({
+      continueLaunch: async ({ request, agentValidation, backendResolution }) => ({
+        status: "ready-to-launch",
+        agentIdentifier: agentValidation.identifier,
+        backend: backendResolution.selectedBackend,
+        launchAction: backendResolution.action,
+        task: request.task,
+      }),
+    });
+
+    const result = await handlers.copilotSubagentLaunch({
+      requestedBackend: "zellij",
+      requestedIdentifier: "reviewer",
+      task: "Verify attached zellij backend selection",
+      enumerateCustomAgents: async () => [{ identifier: "reviewer" }],
+      env: {
+        ZELLIJ: "0",
+        ZELLIJ_PANE_ID: "0",
+        ZELLIJ_SESSION_NAME: "copilot-zellij-test",
+      },
+      hasCommand: (command) => command === "zellij",
+    });
+
+    assert.deepEqual(result, {
+      status: "ready-to-launch",
+      agentIdentifier: "reviewer",
+      backend: "zellij",
+      launchAction: "attach",
+      task: "Verify attached zellij backend selection",
+    });
+  });
+
   it("writes the optional project-local launch index during launch lifecycle updates", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
@@ -452,6 +547,339 @@ describe("single pane-backed launch orchestration", () => {
     assert.ok(calls.some(({ args }) => args[0] === "split-window"));
     assert.ok(calls.some(({ args }) => args[0] === "send-keys"));
     assert.ok(calls.some(({ args }) => args[0] === "capture-pane"));
+  });
+
+  it("GIVEN default runtime wiring for zellij WHEN a single launch is attempted THEN it uses zellij pane operations to open a visible pane and send the child command", async (t) => {
+    const workspacePath = await createWorkspace(t);
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const calls = [];
+    const launchCommand = "printf 'assistant: Zellij adapter launch queued\\n__SUBAGENT_DONE_0__\\n'";
+    const handlers = await createExtensionHandlers({
+      resolveLaunchBackend: async () => ({
+        ok: true,
+        selectedBackend: "zellij",
+        action: "attach",
+        manualSetupRequired: false,
+      }),
+      runBackendCommand: async ({ command, args }) => {
+        calls.push({ command, args });
+
+        if (command !== "zellij") {
+          assert.fail(`unexpected backend command: ${command}`);
+        }
+
+        if (args[0] === "action" && args[1] === "new-pane") {
+          return { stdout: "pane:42\n" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && /ZELLIJ_PANE_ID/.test(args[2] ?? "")) {
+          const match = args[2].match(/>\s*(['"]?)(.+?)\1$/);
+          if (match) {
+            await writeFile(match[2], "42\n", "utf8");
+          }
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars") {
+          return { stdout: "" };
+        }
+
+        assert.fail(`unexpected zellij args: ${args.join(" ")}`);
+      },
+      createAgentLaunchCommand: ({ agentIdentifier, task }) => {
+        assert.equal(agentIdentifier, "reviewer");
+        assert.equal(task, "Use zellij default adapters");
+        return launchCommand;
+      },
+    });
+
+    const result = await handlers.copilotSubagentLaunch({
+      workspacePath,
+      requestedIdentifier: "reviewer",
+      task: "Use zellij default adapters",
+      enumerateCustomAgents: async () => [{ identifier: "reviewer" }],
+      awaitCompletion: false,
+    });
+
+    assert.equal(result.status, "running");
+    assert.equal(result.backend, "zellij");
+    assert.equal(result.launchAction, "attach");
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "new-pane"));
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand));
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write" && args[2] === "13"));
+  });
+
+  it("GIVEN zellij new-pane omits a pane id WHEN the default launch path runs THEN launch metadata falls back to the pane-id temp file flow", async (t) => {
+    const workspacePath = await createWorkspace(t);
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const calls = [];
+    let captureEnv = null;
+    let launchEnv = null;
+    const launchCommand = "printf 'assistant: Zellij fallback launch queued\\n__SUBAGENT_DONE_0__\\n'";
+    const handlers = await createExtensionHandlers({
+      resolveLaunchBackend: async () => ({
+        ok: true,
+        selectedBackend: "zellij",
+        action: "attach",
+        manualSetupRequired: false,
+      }),
+      runBackendCommand: async ({ command, args, env }) => {
+        calls.push({ command, args });
+
+        if (command !== "zellij") {
+          assert.fail(`unexpected backend command: ${command}`);
+        }
+
+        if (args[0] === "action" && args[1] === "new-pane") {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && /ZELLIJ_PANE_ID/.test(args[2] ?? "")) {
+          captureEnv = env;
+          const match = args[2].match(/>\s*(['"]?)(.+?)\1$/);
+          if (!match) {
+            assert.fail(`expected pane-id capture path in ${args[2]}`);
+          }
+          await writeFile(match[2], "84\n", "utf8");
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand) {
+          launchEnv = env;
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
+          return { stdout: "" };
+        }
+
+        assert.fail(`unexpected zellij args: ${args.join(" ")}`);
+      },
+      createAgentLaunchCommand: ({ agentIdentifier, task }) => {
+        assert.equal(agentIdentifier, "reviewer");
+        assert.equal(task, "Use zellij pane-id fallback");
+        return launchCommand;
+      },
+    });
+
+    const result = await handlers.copilotSubagentLaunch({
+      workspacePath,
+      requestedIdentifier: "reviewer",
+      task: "Use zellij pane-id fallback",
+      enumerateCustomAgents: async () => [{ identifier: "reviewer" }],
+      awaitCompletion: false,
+      env: {
+        ZELLIJ: "0",
+        ZELLIJ_SESSION_NAME: "copilot-zellij-test",
+        ZELLIJ_PANE_ID: "5",
+      },
+    });
+
+    assert.equal(result.status, "running");
+    assert.equal(result.backend, "zellij");
+    assert.equal(result.paneId, "pane:84");
+    const paneIdCaptureIndex = calls.findIndex(
+      ({ args }) => args[0] === "action" && args[1] === "write-chars" && /ZELLIJ_PANE_ID/.test(args[2] ?? ""),
+    );
+    const launchCommandIndex = calls.findIndex(
+      ({ args }) => args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand,
+    );
+
+    assert.equal(calls[0]?.args[1], "new-pane");
+    assert.ok(paneIdCaptureIndex >= 0);
+    assert.match(calls[paneIdCaptureIndex].args[2], /^echo "\$ZELLIJ_PANE_ID" > ['"]?.+['"]?$/);
+    assert.equal(captureEnv?.ZELLIJ_PANE_ID, undefined);
+    assert.equal(launchEnv?.ZELLIJ_PANE_ID, "84");
+    assert.ok(launchCommandIndex > paneIdCaptureIndex);
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write" && args[2] === "13"));
+  });
+
+  it("GIVEN zellij default launch falls back to pane-id temp-file capture AND the temp file exists empty before the pane id is written WHEN launch proceeds THEN it still reaches running with the captured pane id", async (t) => {
+    const workspacePath = await createWorkspace(t);
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const calls = [];
+    const launchCommand = "printf 'assistant: Zellij fallback race launch queued\\n__SUBAGENT_DONE_0__\\n'";
+    let delayedPaneIdWrite = Promise.resolve();
+    t.after(async () => {
+      await delayedPaneIdWrite;
+    });
+
+    const handlers = await createExtensionHandlers({
+      resolveLaunchBackend: async () => ({
+        ok: true,
+        selectedBackend: "zellij",
+        action: "attach",
+        manualSetupRequired: false,
+      }),
+      runBackendCommand: async ({ command, args }) => {
+        calls.push({ command, args });
+
+        if (command !== "zellij") {
+          assert.fail(`unexpected backend command: ${command}`);
+        }
+
+        if (args[0] === "action" && args[1] === "new-pane") {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && /ZELLIJ_PANE_ID/.test(args[2] ?? "")) {
+          const match = args[2].match(/>\s*(['"]?)(.+?)\1$/);
+          if (!match) {
+            assert.fail(`expected pane-id capture path in ${args[2]}`);
+          }
+          await writeFile(match[2], "", "utf8");
+          delayedPaneIdWrite = new Promise((resolve) => {
+            setTimeout(() => {
+              writeFile(match[2], "84\n", "utf8")
+                .then(() => resolve())
+                .catch(() => resolve());
+            }, 50);
+          });
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand) {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
+          return { stdout: "" };
+        }
+
+        assert.fail(`unexpected zellij args: ${args.join(" ")}`);
+      },
+      createAgentLaunchCommand: ({ agentIdentifier, task }) => {
+        assert.equal(agentIdentifier, "reviewer");
+        assert.equal(task, "Use zellij pane-id fallback race");
+        return launchCommand;
+      },
+    });
+
+    const result = await handlers.copilotSubagentLaunch({
+      workspacePath,
+      requestedIdentifier: "reviewer",
+      task: "Use zellij pane-id fallback race",
+      enumerateCustomAgents: async () => [{ identifier: "reviewer" }],
+      awaitCompletion: false,
+    });
+
+    assert.equal(result.status, "running");
+    assert.equal(result.backend, "zellij");
+    assert.equal(result.paneId, "pane:84");
+    const paneIdCaptureIndex = calls.findIndex(
+      ({ args }) => args[0] === "action" && args[1] === "write-chars" && /ZELLIJ_PANE_ID/.test(args[2] ?? ""),
+    );
+    const launchCommandIndex = calls.findIndex(
+      ({ args }) => args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand,
+    );
+
+    assert.equal(calls[0]?.args[1], "new-pane");
+    assert.ok(paneIdCaptureIndex >= 0);
+    assert.match(calls[paneIdCaptureIndex].args[2], /^echo "\$ZELLIJ_PANE_ID" > ['"]?.+['"]?$/);
+    assert.ok(launchCommandIndex > paneIdCaptureIndex);
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write" && args[2] === "13"));
+  });
+
+  it("GIVEN default zellij runtime monitoring and awaitCompletion WHEN pane output contains a completion sentinel and summary THEN launch succeeds without using an invalid dump-screen pane-id flag", async (t) => {
+    const workspacePath = await createWorkspace(t);
+    const { createExtensionHandlers } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      ["createExtensionHandlers"],
+    );
+
+    const calls = [];
+    let dumpScreenEnv = null;
+    const launchCommand = "printf 'assistant: Zellij monitor path queued\\n__SUBAGENT_DONE_0__\\n'";
+    const handlers = await createExtensionHandlers({
+      resolveLaunchBackend: async () => ({
+        ok: true,
+        selectedBackend: "zellij",
+        action: "attach",
+        manualSetupRequired: false,
+      }),
+      runBackendCommand: async ({ command, args, env }) => {
+        calls.push({ command, args });
+
+        if (command !== "zellij") {
+          assert.fail(`unexpected backend command: ${command}`);
+        }
+
+        if (args[0] === "action" && args[1] === "new-pane") {
+          return { stdout: "pane:42\n" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand) {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "dump-screen") {
+          dumpScreenEnv = env;
+          if (args.includes("--pane-id")) {
+            throw new Error(`zellij rejected invalid dump-screen invocation: ${args.join(" ")}`);
+          }
+
+          const outputPath = args.find((value) => /copilot-subagents-zellij-screen/.test(String(value)));
+          if (!outputPath) {
+            throw new Error(`expected dump-screen output path in: ${args.join(" ")}`);
+          }
+
+          await writeFile(
+            outputPath,
+            "assistant: Zellij monitor path succeeded\n__SUBAGENT_DONE_0__\n",
+            "utf8",
+          );
+          return { stdout: "" };
+        }
+
+        assert.fail(`unexpected zellij args: ${args.join(" ")}`);
+      },
+      createAgentLaunchCommand: ({ agentIdentifier, task }) => {
+        assert.equal(agentIdentifier, "reviewer");
+        assert.equal(task, "Use zellij monitor path");
+        return launchCommand;
+      },
+    });
+
+    const result = await handlers.copilotSubagentLaunch({
+      workspacePath,
+      requestedIdentifier: "reviewer",
+      task: "Use zellij monitor path",
+      enumerateCustomAgents: async () => [{ identifier: "reviewer" }],
+      awaitCompletion: true,
+    });
+
+    const dumpScreenCall = calls.find(({ args }) => args[0] === "action" && args[1] === "dump-screen");
+
+    assert.ok(dumpScreenCall, "expected zellij dump-screen monitoring call");
+    assert.ok(
+      !dumpScreenCall.args.includes("--pane-id"),
+      `invalid zellij dump-screen invocation: ${dumpScreenCall.args.join(" ")}`,
+    );
+    assert.equal(dumpScreenEnv?.ZELLIJ_PANE_ID, "42");
+    assert.equal(result.status, "success");
+    assert.equal(result.backend, "zellij");
+    assert.equal(result.paneId, "pane:42");
+    assert.equal(result.summary, "Zellij monitor path succeeded");
   });
 
   it("GIVEN the built-in default Copilot agent WHEN the default launch command is built THEN it omits --agent and uses the base prompt mode", async (t) => {

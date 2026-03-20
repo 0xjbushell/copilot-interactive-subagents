@@ -73,11 +73,11 @@ function formatFailureMessage(failures) {
   return failures.map(({ backend, error }) => `${backend}: ${error}`).join("; ");
 }
 
-async function tryAttachedBackends(backends, attach, env) {
+async function tryAttachedBackends(backends, attach, env, hasCommand = () => true) {
   const failures = [];
 
   for (const backend of backends) {
-    if (!isAttached(backend, env)) {
+    if (!isAttached(backend, env) || !hasCommand(backend)) {
       continue;
     }
 
@@ -123,7 +123,7 @@ async function resolveRequestedBackend({
   attach,
   start,
 }) {
-  const attachedResolution = await tryAttachedBackends([requestedBackend], attach, env);
+  const attachedResolution = await tryAttachedBackends([requestedBackend], attach, env, hasCommand);
   if (attachedResolution.ok) {
     return attachedResolution;
   }
@@ -176,7 +176,7 @@ async function resolveAutomaticBackend({
   attach,
   start,
 }) {
-  const attachedResolution = await tryAttachedBackends(SUPPORTED_BACKENDS, attach, env);
+  const attachedResolution = await tryAttachedBackends(SUPPORTED_BACKENDS, attach, env, hasCommand);
   if (attachedResolution.ok) {
     return attachedResolution;
   }
@@ -218,7 +218,7 @@ export async function discoverLaunchBackends({
   const discovered = [];
 
   for (const backend of SUPPORTED_BACKENDS) {
-    if (isAttached(backend, env)) {
+    if (isAttached(backend, env) && hasCommand(backend)) {
       discovered.push({
         backend,
         source: "attached",
