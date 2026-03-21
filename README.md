@@ -165,6 +165,8 @@ There are two supported installation styles:
 - project-scoped installation
 - global/user-scoped installation
 
+This repository also ships with an installer script that copies both the extension and the starter Agent Skill.
+
 ### Prerequisites
 
 - GitHub Copilot CLI installed and working
@@ -172,23 +174,54 @@ There are two supported installation styles:
 - `tmux` installed if you want the default fully working pane backend
 - optional: installed custom agents if you want to launch agents other than the default `github-copilot`
 
+### Recommended installer
+
+Run the installer from this repository:
+
+```bash
+node scripts/install.mjs
+```
+
+If you do not pass a scope, the script prompts you to choose:
+
+- `global` installs to `~/.copilot/`
+- `project` installs to a target repository under `.github/`
+
+Non-interactive examples:
+
+```bash
+node scripts/install.mjs --scope global
+node scripts/install.mjs --scope project --project-root /path/to/target-repo
+node scripts/install.mjs --scope global --force
+```
+
+The installer always copies both of these assets:
+
+```text
+.github/extensions/copilot-interactive-subagents/
+.github/skills/using-copilot-interactive-subagents/
+```
+
 ### Project-scoped installation
 
-Use this when you want the extension to apply only to a specific repository.
+Use this when you want the extension and starter skill to apply only to a specific repository.
 
-Copy the entire extension directory into the target repository:
+Copy both directories into the target repository:
 
 ```text
 <target-repo>/.github/extensions/copilot-interactive-subagents/
   extension.mjs
   lib/
+<target-repo>/.github/skills/using-copilot-interactive-subagents/
+  SKILL.md
 ```
 
 If you are installing from this repository as the source, an example command is:
 
 ```bash
-mkdir -p /path/to/target-repo/.github/extensions
+mkdir -p /path/to/target-repo/.github/extensions /path/to/target-repo/.github/skills
 cp -R .github/extensions/copilot-interactive-subagents /path/to/target-repo/.github/extensions/
+cp -R .github/skills/using-copilot-interactive-subagents /path/to/target-repo/.github/skills/
 ```
 
 Then restart Copilot CLI in that repository.
@@ -197,25 +230,29 @@ Copilot CLI will discover:
 
 ```text
 /path/to/target-repo/.github/extensions/copilot-interactive-subagents/extension.mjs
+/path/to/target-repo/.github/skills/using-copilot-interactive-subagents/SKILL.md
 ```
 
 ### Global or user-scoped installation
 
-Use this when you want the extension available across repositories.
+Use this when you want the extension and starter skill available across repositories.
 
-Copy the entire extension directory to:
+Copy both directories to:
 
 ```text
 ~/.copilot/extensions/copilot-interactive-subagents/
   extension.mjs
   lib/
+~/.copilot/skills/using-copilot-interactive-subagents/
+  SKILL.md
 ```
 
 Example:
 
 ```bash
-mkdir -p ~/.copilot/extensions
+mkdir -p ~/.copilot/extensions ~/.copilot/skills
 cp -R .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/
+cp -R .github/skills/using-copilot-interactive-subagents ~/.copilot/skills/
 ```
 
 Then restart Copilot CLI.
@@ -233,9 +270,10 @@ That makes it easy to keep a stable global install while testing a project-local
 
 If you are new to the extension, this is the shortest path to a successful first run:
 
-1. Install the extension either:
-   - in the current repo under `.github/extensions/copilot-interactive-subagents/`, or
-   - globally under `~/.copilot/extensions/copilot-interactive-subagents/`
+1. Install the extension and starter skill either:
+   - by running `node scripts/install.mjs`, or
+   - in the current repo under `.github/extensions/copilot-interactive-subagents/` plus `.github/skills/using-copilot-interactive-subagents/`, or
+   - globally under `~/.copilot/extensions/copilot-interactive-subagents/` plus `~/.copilot/skills/using-copilot-interactive-subagents/`
 2. Make sure you have a working pane backend:
    - easiest path: install `tmux`
    - optional attached path: install `zellij` and start Copilot from inside an existing `zellij` session

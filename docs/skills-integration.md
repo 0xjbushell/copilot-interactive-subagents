@@ -8,6 +8,8 @@ If you want a ready-made project skill that teaches agents how to use this exten
 .github/skills/using-copilot-interactive-subagents/SKILL.md
 ```
 
+To install both the extension and this starter skill into either `~/.copilot/` or a target repository, use `node scripts/install.mjs`.
+
 ## Generic tool contract
 
 ### `copilot_subagent_list_agents`
