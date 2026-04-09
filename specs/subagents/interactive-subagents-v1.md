@@ -41,10 +41,13 @@ mkdir -p test/unit test/integration test/e2e
 | Ephemeral panes | `lib/close-pane.mjs` (new), `lib/launch.mjs` (call closePane after completion) |
 | Session fork | `lib/fork-session.mjs` (new), `lib/launch.mjs` (fork before launch) |
 | Resume | `lib/resume.mjs` (new pane + `--resume`), `lib/session-lock.mjs` (new) |
-| Summary extraction | `lib/summary.mjs` (read events.jsonl), `lib/launch.mjs` (call after completion) |
-| `subagent_done` tool | `extension.mjs` (register tool in child sessions) |
+| Summary extraction | `lib/summary.mjs` (add `extractSessionSummary`), `lib/launch.mjs` (call after completion) |
+| `subagent_done` tool | `extension.mjs` (register tool — loaded via extension sidecar in child sessions with TTY) |
 | Backend preference | `lib/mux.mjs` (zellij first when both available) |
 | Manifest v2 | `lib/state.mjs` (schema), `lib/state-index.mjs` (propagation), all tests with `metadataVersion: 1` |
+| Parallel passthrough | `lib/parallel.mjs` (pass new v1 params `interactive`, `fork`, `closePaneOnCompletion` to individual launches) |
+| Quality targets | `scripts/quality/targets.mjs` (add new v1 modules to CRAP/mutation targets) |
+| Test scripts | `package.json` (add `test:unit`, `test:integration`, `test:e2e` scripts) |
 
 ### Verified Commands
 
@@ -132,6 +135,8 @@ Every assumption below was verified by a learning test (LT) before this spec was
 | `-i "task"` + `--resume=<UUID>` work together for interactive resume | LT3: confirmed, full context retained | ✅ Proven | Interactive resume breaks — must use `-p` with sentinel |
 | `events.jsonl` contains `assistant.message` events with `data.content` for summary | LT5: confirmed, reliable across session types | ✅ Proven | Summary extraction breaks — fall back to workspace.yaml only |
 | Sentinel pattern (`__SUBAGENT_DONE_<code>__`) works unchanged with `--resume` | Existing codebase: sentinel is shell-level, independent of session flags | ✅ Proven | Autonomous completion detection breaks |
+| Extension tools only load when copilot has a real TTY (tmux pane, terminal) — not when stdout is piped | LT: confirmed; `copilot -i` in tmux pane → extensions loaded; same command piped → no extensions. TTY detection controls extension sidecar forking. | ✅ Proven | E2E harness must use tmux panes (real PTY), not piped invocations |
+| `extensions_reload` kills extension sidecars without restarting them | LT: confirmed; reload is destructive and non-recoverable within the session | ✅ Proven | Hot-reload development workflow breaks — new session required after extension changes |
 
 ## Cross-Cutting Invariants
 
@@ -149,9 +154,13 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 
 6. **Autonomous panes are non-interactive**: User input in an autonomous (`-p`) pane is unsupported. No "user takeover" state transition exists. If the user wants to interact, they resume the session.
 
-7. **Existing flags preserved**: The launch command builder MUST preserve all flags from `createDefaultAgentLaunchCommand()` (`--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`, `-s`). v1 adds `--resume=<UUID>` and selects `-i`/`-p` — it does not remove anything.
+7. **Existing flags preserved**: The launch command builder MUST preserve all flags from `createDefaultAgentLaunchCommand()` (`--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`). v1 adds `--resume=<UUID>` and selects `-i`/`-p`. For autonomous mode (`-p`), also keep `-s` (silent output). For interactive mode (`-i`), omit `-s` so the user sees copilot's UI.
 
 8. **Graceful degradation on missing data**: Summary extraction returns `null` (not crash) on missing session dir, empty events.jsonl, or truncated JSONL. Fork returns structured error (not crash) on disk full or permission errors.
+
+9. **Extension tools require a real TTY**: Extension sidecars are only forked when copilot detects a real TTY (e.g., tmux pane, terminal). Piped invocations and subshells do NOT load extensions. Subagent child sessions launched in tmux panes DO get extension tools (tmux provides a PTY). E2E tests must run copilot in tmux panes, not piped commands.
+
+10. **Caller-owned locks**: The caller that acquires a lock is responsible for releasing it. Locks are NOT automatically released on operation completion — the caller must explicitly call `release()`. Process exit cleanup is a safety net, not the primary release mechanism.
 
 ## Architecture
 
@@ -333,7 +342,7 @@ Modifies `createDefaultAgentLaunchCommand()` to add `--resume=<UUID>` and select
 
 Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
 
-**Concrete change**: In `lib/state.mjs`, change `export const METADATA_VERSION = 1;` → `export const METADATA_VERSION = 2;` and add new fields to `createLaunchRecord()`. Update all tests that assert `metadataVersion: 1` (search: `grep -rn 'metadataVersion.*1' test/`).
+**Concrete change**: In `lib/state.mjs`, change `export const METADATA_VERSION = 1;` → `export const METADATA_VERSION = 2;` and add new fields to the existing `createLaunchRecord()` function (do NOT rename it — all existing call sites use this name). Update all tests that assert `metadataVersion: 1` (search: `grep -rn 'metadataVersion.*1' test/`). The spec's acceptance criterion `createManifestV2()` refers to this same function producing v2-shaped records.
 
 ```javascript
 // Launch manifest v2 shape:
@@ -358,7 +367,7 @@ Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
     parentCopilotSessionId: string,
     parentLaunchId: string | null,
   } | null,
-  closedPaneOnCompletion: boolean,
+  closePaneOnCompletion: boolean,
   eventsBaseline: number | null, // event count at launch/resume time, for delta summary extraction
 }
 ```
@@ -429,7 +438,12 @@ Closes a multiplexer pane by backend type.
 
 #### `extractSessionSummary` (Wave 2) — Update `lib/summary.mjs`
 
-Extracts summary from Copilot session state files, with delta support for resume.
+Extracts summary from Copilot session state files, with delta support for resume. This is a **new export** that coexists with the existing `extractLaunchSummary` (which reads pane output). The two serve different purposes:
+
+- `extractLaunchSummary` (existing) — reads pane output text, used during sentinel detection
+- `extractSessionSummary` (new) — reads session state files (`events.jsonl`), used after sentinel for persistent summary
+- `waitForLaunchCompletion` (existing) — orchestrates sentinel polling, unchanged
+- `mapExitState` (existing) — maps exit codes to status strings, unchanged
 
 ```javascript
 extractSessionSummary({ copilotSessionId, sinceEventIndex }) → {
@@ -500,8 +514,11 @@ forkSession({ parentCopilotSessionId }) → {
 
 Tool registered in child sessions for explicit completion signaling.
 
+**How it works**: Child copilot sessions launched in tmux panes have a real TTY, which means extensions load and `subagent_done` is registered via `joinSession({ tools })` in the child's extension sidecar. The tool triggers `process.exit(0)`, which the sentinel wrapper in the parent pane captures as `__SUBAGENT_DONE_0__`.
+
 ```javascript
-// Registered via joinSession({ tools: [...] }) in the child copilot process
+// Registered automatically by the extension in any copilot session with a TTY
+// (tmux panes provide a TTY, so child subagents get this tool)
 {
   name: "subagent_done",
   description: "Call when you have completed your task. Your last message becomes the summary returned to the parent.",
@@ -514,7 +531,7 @@ Tool registered in child sessions for explicit completion signaling.
 }
 ```
 
-**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). Without this, autonomous sessions rely on copilot naturally exiting, and interactive sessions rely on user Ctrl+D.
+**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). Without this, autonomous sessions rely on copilot naturally exiting, and interactive sessions rely on user Ctrl+D. Works because tmux panes provide a real TTY, and copilot forks extension sidecars when it detects a TTY (see Validated Assumptions).
 
 **Test file**: `test/unit/subagent-done.test.mjs` (new)
 
@@ -549,9 +566,8 @@ Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
 
 // Response (error)
 {
-  launchId: string,
-  status: "error",
-  error: "SESSION_ACTIVE",
+  ok: false,
+  code: "SESSION_ACTIVE",
   message: "Session is currently active in another pane. Close or wait for completion before resuming."
 }
 ```
@@ -608,7 +624,7 @@ New parameters added to the `copilot_subagent_launch` tool alongside existing on
 
 ## Consolidated Error Codes
 
-All structured errors returned by v1 services, in one place:
+All structured errors use the envelope `{ ok: false, code: "<ERROR_CODE>", message: "<user-facing>" }`. This matches the existing codebase pattern (`INVALID_ARGUMENT`, `LAUNCH_NOT_FOUND`, etc.).
 
 | Error Code | Returned By | Condition | User-Facing Message |
 |-----------|------------|-----------|---------------------|
@@ -639,7 +655,7 @@ All structured errors returned by v1 services, in one place:
 - `lib/resume.mjs` — new resume flow (new pane + `--resume=<copilotSessionId>`, error responses)
 - `lib/summary.mjs` — add session-file-based summary extraction alongside sentinel
 - `lib/mux.mjs` — backend preference ordering (zellij first when both available)
-- `lib/parallel.mjs` — launch result/status shape changes for v2 manifest
+- `lib/parallel.mjs` — pass new v1 params (`interactive`, `fork`, `closePaneOnCompletion`) through to individual launches; update result/status shape for v2 manifest. `copilot_subagent_parallel` delegates to `copilot_subagent_launch` for each agent — it does not implement its own launch logic.
 - Tool parameter schemas — add `interactive`, `fork`, `closePaneOnCompletion` to launch; update resume contract
 - `README.md` / `docs/skills-integration.md` — document new parameters and behavior
 - Tests hardcoding `metadataVersion: 1` — update to v2 (`state-store`, `resume`, `single-launch`, `tool-interface`)
@@ -803,32 +819,42 @@ E2E tests validate the full extension with **real Copilot CLI sessions** and **r
 
 **Prerequisites**: `copilot` CLI available, at least one of tmux/zellij installed.
 
+**Critical constraint**: Extension tools only load when copilot has a real TTY. Tmux panes provide a PTY, so copilot launched in a tmux pane gets extensions. Piped invocations do NOT. See Validated Assumptions.
+
 **Harness design** (4 phases):
 
 ```
 1. SETUP
+   ├── Copy updated extension to ~/.copilot/extensions/copilot-interactive-subagents/
    ├── Create isolated tmux session: tmux new-session -d -s "e2e-test-<UUID>"
-   ├── Install extension to temp copilot config dir
-   └── Generate pre-assigned copilotSessionId (UUID)
+   └── Prepare test prompt that exercises extension tools
 
 2. EXECUTE
-   ├── Run: copilot -p "task" --allow-all-tools -s --resume=<UUID>
-   ├── Extension creates subagent pane inside test tmux session
-   └── Wait for sentinel / process exit
+   ├── Launch copilot in the tmux pane (TTY required for extensions):
+   │   tmux send-keys -t "e2e-test-<UUID>" \
+   │     'copilot -i "<test-prompt>" --allow-all --model <cheap-model> --no-ask-user' Enter
+   ├── Extensions load automatically (TTY-dependent, not mode-dependent)
+   ├── Test prompt instructs copilot to call extension tools (launch, resume, etc.)
+   └── Poll for completion: tmux capture-pane + grep for done marker
 
-3. VERIFY
-   ├── Launch manifest exists with correct copilotSessionId
+3. VERIFY (primary oracles — NOT screen text)
+   ├── Launch manifest exists at .copilot-interactive-subagents/launches/<launchId>.json
+   ├── Manifest fields: copilotSessionId, status, metadataVersion: 2
    ├── Session state dir exists: ~/.copilot/session-state/<UUID>/
-   ├── events.jsonl contains: session.start → user.message → assistant.message
-   ├── Manifest status is terminal (success/failure)
-   ├── Pane was closed (if closePaneOnCompletion: true)
-   └── Summary extracted matches last assistant message
+   ├── events.jsonl contains expected event sequence
+   ├── Pane lifecycle correct (created, closed per closePaneOnCompletion)
+   └── Summary extracted matches last assistant.message in events.jsonl
 
 4. CLEANUP
-   ├── Kill test tmux session: tmux kill-session -t "e2e-test-<UUID>"
-   ├── Remove temp workspace
-   └── Optionally remove test session state
+   ├── tmux kill-session -t "e2e-test-<UUID>"
+   └── Remove test workspace and session state artifacts
 ```
+
+**Primary verification oracles** (ranked by reliability):
+1. **Launch manifest JSON** — structured, deterministic, machine-readable
+2. **Session state files** — events.jsonl, workspace.yaml
+3. **Tmux pane existence** — `tmux list-panes` for lifecycle checks
+4. **Tmux capture-pane text** — last resort for liveness/debugging only (brittle)
 
 **E2E test cases** (`test/e2e/`):
 
@@ -848,6 +874,7 @@ E2E tests validate the full extension with **real Copilot CLI sessions** and **r
 - E2E tests use isolated tmux/zellij sessions — never touch the user's active session
 - Timeout: 60s per test (copilot sessions are real and take time)
 - Skip gracefully if copilot CLI or multiplexer is not available (CI without tmux)
+- **Do NOT use `extensions_reload`** — it kills extension sidecars permanently. Deploy extension changes to `~/.copilot/extensions/` and start a fresh copilot session in a new tmux pane instead.
 
 ### Cross-Service Scenario Matrix
 
@@ -878,7 +905,8 @@ Parent agent calls copilot_subagent_launch({
 
 → Extension generates copilotSessionId: "a1b2c3d4-..."
 → Opens tmux pane, sends: node -e '...' (sentinel wrapper)
-   → Inside wrapper: copilot -p "$TASK" --resume=a1b2c3d4-... --allow-all-tools -s
+   → Inside wrapper: COPILOT_SUBAGENT_TASK_B64=<base64> copilot -p "$(echo $COPILOT_SUBAGENT_TASK_B64 | base64 -d)" --resume=a1b2c3d4-... --allow-all-tools -s
+   (task content transported via base64 env var — never raw interpolation)
 → Writes manifest: { status: "running", copilotSessionId: "a1b2c3d4-...", ... }
 → Polls pane output for __SUBAGENT_DONE_<code>__
 → Sentinel found: __SUBAGENT_DONE_0__
@@ -905,8 +933,8 @@ Parent agent calls copilot_subagent_launch({
 → Copies ~/.copilot/session-state/a1b2c3d4-.../ → ~/.copilot/session-state/e5f6g7h8-.../
 → Updates workspace.yaml id to "e5f6g7h8-..."
 → Releases lock on "a1b2c3d4-..."
-→ Opens tmux pane, sends: copilot -i "$TASK" --resume=e5f6g7h8-... --allow-all-tools
-   (no sentinel wrapper — interactive mode)
+→ Opens tmux pane, sends: COPILOT_SUBAGENT_TASK_B64=<base64> copilot -i "$(echo $COPILOT_SUBAGENT_TASK_B64 | base64 -d)" --resume=e5f6g7h8-... --allow-all-tools
+   (no sentinel wrapper — interactive mode; task via safe transport)
 → Writes manifest: { status: "interactive", copilotSessionId: "e5f6g7h8-...",
                       fork: { parentCopilotSessionId: "a1b2c3d4-..." } }
 → Returns immediately: { launchId: "abc", status: "interactive", ... }

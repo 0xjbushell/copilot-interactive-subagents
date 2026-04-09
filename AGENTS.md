@@ -2,7 +2,7 @@
 
 ## What This Extension Does
 
-`copilot-interactive-subagents` is a Copilot CLI extension. It launches child Copilot agents in tmux/zellij panes, tracks their sessions via launch manifests, and provides tools (`copilot_subagent_launch`, `copilot_subagent_resume`, `copilot_subagent_parallel`, `copilot_subagent_set_title`, `copilot_subagent_list_agents`) for orchestration. v1 adds persistent sessions, interactive mode, fork, resume, and explicit completion signaling.
+`copilot-interactive-subagents` is a Copilot CLI extension. It launches child Copilot agents in tmux/zellij panes, tracks their sessions via launch manifests, and provides tools (`copilot_subagent_launch`, `copilot_subagent_resume`, `copilot_subagent_parallel`, `copilot_subagent_set_title`, `copilot_subagent_list_agents`) for orchestration. v1 adds 6 capabilities: **ephemeral panes** (auto-close after completion), **persistent sessions** (tracked by UUID), **interactive mode** (user collaborates in pane), **resume** (continue a completed session), **fork** (copy a session's context into a new child), and **explicit completion** (`subagent_done` tool).
 
 ## Repository Layout
 
