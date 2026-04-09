@@ -7,6 +7,8 @@ This directory contains canonical design specifications for `copilot-interactive
 | Subsystem | Directory | Use When |
 | --- | --- | --- |
 | Subagent orchestration | `specs/subagents/` | The spec concerns multiplexer-backed subagent launching, monitoring, resume, or workflow orchestration for Copilot CLI. |
+| Decisions | `specs/decisions/` | Locked cross-cutting decisions that future specs and execution must honor. |
+| Explorations | `specs/explorations/` | Free-form brainstorming artifacts and research notes. |
 
 ## Authoring Rules
 
