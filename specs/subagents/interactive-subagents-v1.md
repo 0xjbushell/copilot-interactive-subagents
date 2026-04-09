@@ -104,6 +104,7 @@ cmux remains in the public tool interface and backend discovery but **does not r
 - `interactive`, `fork`, and `closePaneOnCompletion` parameters are ignored for cmux launches (logged as warning)
 - Resume of a cmux-launched session falls back to legacy reattach behavior
 - No cmux-specific tests are added or removed
+- **Manifest v2 fields for cmux**: `copilotSessionId: null`, `interactive: false`, `fork: null`, `closePaneOnCompletion: false`, `eventsBaseline: null`. The v2 schema applies to ALL launches (cmux included) — cmux simply gets null/false defaults for session-related fields.
 
 ## Design Decisions
 
@@ -315,7 +316,7 @@ Modifies `createDefaultAgentLaunchCommand()` to add `--resume=<UUID>` and select
 
 ```javascript
 // Input: existing launch args + new v1 params
-// Output: command string array ready for shell execution
+// Output: single shell command string (NOT an array) — same contract as current code
 
 // Key behaviors:
 // - ALWAYS adds --resume=<copilotSessionId> (pre-generated UUID)
@@ -554,7 +555,7 @@ Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
   awaitCompletion: boolean,   // default: false
 }
 
-// Response (success)
+// Response (success — fire-and-forget, awaitCompletion: false)
 {
   launchId: string,
   copilotSessionId: string,
@@ -562,6 +563,18 @@ Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
   paneId: string,             // NEW pane
   status: "interactive",
   resumePointer: { launchId, copilotSessionId, backend, paneId }
+}
+
+// Response (success — awaited, awaitCompletion: true)
+{
+  launchId: string,
+  copilotSessionId: string,
+  backend: string,
+  paneId: string | null,      // null if pane closed on completion
+  status: "success" | "failure" | "timeout",
+  exitCode: number | null,
+  summary: string | null,
+  resumePointer: { launchId, copilotSessionId, backend, paneId: null }
 }
 
 // Response (error)
@@ -629,7 +642,7 @@ All structured errors use the envelope `{ ok: false, code: "<ERROR_CODE>", messa
 | Error Code | Returned By | Condition | User-Facing Message |
 |-----------|------------|-----------|---------------------|
 | `SESSION_ACTIVE` | resume, fork | Session has an active copilot process | "Session is currently active in another pane. Close or wait for completion before resuming." |
-| `SESSION_NOT_FOUND` | resume, fork | No manifest found for launchId | "No launch record found for this ID." |
+| `LAUNCH_NOT_FOUND` | resume, fork | No manifest found for launchId | "No launch record found for this ID." |
 | `FORK_FAILED` | fork | Disk full, permissions, or copy error | "Failed to fork session: {reason}. No partial files left." |
 | `BACKEND_UNAVAILABLE` | launch, resume | Requested backend not detected | "Backend '{name}' is not available." |
 | `INVALID_FORK_TARGET` | launch | Fork parameter shape invalid | "Fork requires { launchId } or { copilotSessionId }." |
@@ -832,7 +845,7 @@ E2E tests validate the full extension with **real Copilot CLI sessions** and **r
 2. EXECUTE
    ├── Launch copilot in the tmux pane (TTY required for extensions):
    │   tmux send-keys -t "e2e-test-<UUID>" \
-   │     'copilot -i "<test-prompt>" --allow-all --model <cheap-model> --no-ask-user' Enter
+   │     'copilot -i "<test-prompt>" --allow-all-tools --allow-all-paths --allow-all-urls --model <cheap-model> --no-ask-user' Enter
    ├── Extensions load automatically (TTY-dependent, not mode-dependent)
    ├── Test prompt instructs copilot to call extension tools (launch, resume, etc.)
    └── Poll for completion: tmux capture-pane + grep for done marker
@@ -866,7 +879,7 @@ E2E tests validate the full extension with **real Copilot CLI sessions** and **r
 | Fork + launch | Parent session copied → child has new UUID → parent events.jsonl untouched |
 | Parallel launch (2 agents) | Two panes created → both complete → both manifests in terminal state |
 | Backend: tmux | Full flow on tmux backend |
-| Backend: zellij | Full flow on zellij backend (if available) |
+| Backend: zellij | Full flow on zellij backend (**conditional** — skip if zellij not installed; zellij is opt-in, not default) |
 
 **E2E execution rules for coding agents:**
 - Run `test:e2e` after any change to launch command builder, pane lifecycle, resume flow, or fork service
