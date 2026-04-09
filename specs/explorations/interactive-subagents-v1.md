@@ -1,6 +1,6 @@
 # Interactive Subagents v1 — Exploration
 
-> **Superseded by:** `specs/decisions/interactive-subagents-v1-decisions.md` (locked decisions) and `specs/extensions/interactive-subagents-v1.md` (formal spec). This exploration is retained as historical context. Where this document conflicts with decisions or spec, the spec is authoritative.
+> **Superseded by:** `specs/decisions/interactive-subagents-v1-decisions.md` (locked decisions) and `specs/subagents/interactive-subagents-v1.md` (formal spec). This exploration is retained as historical context. Where this document conflicts with decisions or spec, the spec is authoritative.
 
 ## Context
 

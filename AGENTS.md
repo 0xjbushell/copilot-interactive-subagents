@@ -1,28 +1,91 @@
 # AGENTS.md
 
-copilot-interactive-subagents is a Copilot CLI extension adding persistent sessions, interactive mode, fork, resume, and completion signaling to multiplexer-backed subagent panes.
+## What This Extension Does
 
-## Development Rules
+`copilot-interactive-subagents` is a Copilot CLI extension. It launches child Copilot agents in tmux/zellij panes, tracks their sessions via launch manifests, and provides tools (`copilot_subagent_launch`, `copilot_subagent_resume`, `copilot_subagent_parallel`, `copilot_subagent_set_title`, `copilot_subagent_list_agents`) for orchestration. v1 adds persistent sessions, interactive mode, fork, resume, and explicit completion signaling.
 
-- Source of truth: `.github/extensions/copilot-interactive-subagents/`
-- Tests: `test/` (unit, integration, e2e)
-- Specs: `specs/` (explorations → decisions → formal specs)
+## Repository Layout
+
+```
+.github/extensions/copilot-interactive-subagents/
+├── extension.mjs              # Main entry — tool registration, launch orchestration
+└── lib/
+    ├── agents.mjs             # Agent discovery and validation
+    ├── launch.mjs             # Single launch orchestration
+    ├── mux.mjs                # Backend detection (tmux/zellij)
+    ├── mux-layout.mjs         # Pane layout management
+    ├── parallel.mjs           # Parallel launch orchestration
+    ├── progress.mjs           # Progress reporting
+    ├── resume.mjs             # Resume flow
+    ├── state.mjs              # Launch manifest read/write
+    ├── state-index.mjs        # Manifest index (list all launches)
+    ├── summary.mjs            # Summary extraction from pane/session
+    └── titles.mjs             # Pane title management
+
+test/                          # All test files (node:test + node:assert)
+├── *.test.mjs                 # Current: flat structure
+└── helpers/red-harness.mjs    # Module import + export validation
+
+scripts/
+├── quality/targets.mjs        # CRAP + mutation testing target definitions
+├── test-crap.mjs              # CRAP score runner
+└── test-mutation.mjs          # Mutation test runner
+
+specs/                         # Design specifications
+├── subagents/                 # Formal specs (implementation source of truth)
+├── decisions/                 # Locked design decisions
+└── explorations/              # Historical research (superseded by specs)
+```
+
+## Source of Truth
+
+| What | Path | Rule |
+|------|------|------|
+| **Extension source** | `.github/extensions/copilot-interactive-subagents/` | ✅ Edit here |
+| **Installed copy** | `~/.copilot/extensions/copilot-interactive-subagents/` | ❌ Never edit — overwritten on install |
+| **Tests** | `test/` | ✅ Edit here |
+| **Quality targets** | `scripts/quality/targets.mjs` | ✅ Update when adding modules |
+
+**Deploy after changes:**
+```bash
+cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+```
+
+## Development Workflow
+
+Inner loop for every code change:
+
+```bash
+# 1. Run unit tests (fast feedback, ~1s)
+npm test
+
+# 2. Run CRAP scoring (complexity + coverage)
+npm run test:crap
+
+# 3. Run mutation testing (behavioral coverage)
+npm run test:mutation
+
+# All three in one command:
+npm test && npm run test:crap && npm run test:mutation
+```
 
 ## Quality Gates (Blocking)
 
-Every code change to business logic MUST pass these gates before claiming completion:
+Every code change to business logic MUST pass all three gates before claiming completion:
 
 1. **Tests pass**: `npm test` — 0 failures
-2. **CRAP score**: `npm run test:crap` — exit 0 required. New code must score CRAP < 8.
+2. **CRAP score**: `npm run test:crap` — exit 0 required. New code MUST score CRAP < 8.
 3. **Mutation testing**: `npm run test:mutation` — exit 0 required. Target ≥ 80% kill rate.
 
-Run all three in sequence: `npm test && npm run test:crap && npm run test:mutation`
+Skipping quality gates is not allowed. If a gate fails, fix the code — do not proceed.
 
 ### New Module Checklist
 
 When creating a new `.mjs` file under `lib/`:
 1. Add it to `DETERMINISTIC_LOGIC_TARGETS` in `scripts/quality/targets.mjs`
 2. Add targeted mutants for critical behavioral assertions
-3. Create a corresponding `test/<module-name>.test.mjs`
+3. Create a corresponding test file in `test/`
 
-Skipping quality gates is not allowed. If a gate fails, fix the code — do not proceed.
+## Specifications
+
+The implementation source of truth is `specs/subagents/interactive-subagents-v1.md`. Read the **Start Here** section first — it tells you what to build, in what order, and how to verify.

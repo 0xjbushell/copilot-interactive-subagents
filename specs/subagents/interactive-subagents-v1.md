@@ -2,6 +2,58 @@
 
 Persistent, interactive, and resumable subagent sessions for Copilot CLI in tmux and zellij panes.
 
+## Start Here
+
+> **If you read nothing else, read this section and "Data / Control Flow".**
+
+This spec adds 6 capabilities to the existing extension: **ephemeral panes** (auto-close after completion), **persistent sessions** (tracked by UUID), **interactive mode** (user collaborates in pane), **resume** (continue a completed session), **fork** (copy a session's context into a new child), and **explicit completion** (`subagent_done` tool).
+
+### What to Build (Implementation Waves)
+
+| Wave | Service | File | Action | Depends On | Test File |
+|------|---------|------|--------|------------|-----------|
+| 1 | Manifest v2 schema | `lib/state.mjs` | Update | — | `test/state-store.test.mjs` (update) |
+| 1 | Launch command builder | `extension.mjs` | Update | — | `test/unit/launch-command.test.mjs` (new) |
+| 2 | `sessionLock` | `lib/session-lock.mjs` | **New** | — | `test/unit/session-lock.test.mjs` (new) |
+| 2 | `closePane` | `lib/close-pane.mjs` | **New** | — | `test/unit/close-pane.test.mjs` (new) |
+| 2 | `extractSessionSummary` | `lib/summary.mjs` | Update | — | `test/unit/summary-extraction.test.mjs` (new) |
+| 3 | `forkSession` | `lib/fork-session.mjs` | **New** | sessionLock | `test/unit/fork-session.test.mjs` (new) |
+| 3 | `subagent_done` tool | `extension.mjs` | Update | — | `test/unit/subagent-done.test.mjs` (new) |
+| 4 | Resume flow | `lib/resume.mjs` | Update | sessionLock, extractSessionSummary | `test/resume.test.mjs` (update) |
+| 4 | Launch orchestration | `lib/launch.mjs` | Update | closePane, sessionLock, forkSession | `test/single-launch.test.mjs` (update) |
+| 5 | Integration + E2E | — | — | Waves 1-4 | `test/e2e/*.test.mjs` (new) |
+
+**Waves 1-2 are parallelizable.** Wave 3 depends on sessionLock from Wave 2. Wave 4 integrates everything. Wave 5 validates end-to-end.
+
+### Touchpoint Map (Feature → Files to Edit)
+
+| Feature | Files to Create/Edit |
+|---------|---------------------|
+| Pre-generated session IDs | `extension.mjs` (launch command builder), `lib/state.mjs` (manifest v2) |
+| Interactive mode (`-i` flag) | `extension.mjs` (command builder: `-i` vs `-p`), `lib/launch.mjs` (skip sentinel for interactive) |
+| Ephemeral panes | `lib/close-pane.mjs` (new), `lib/launch.mjs` (call closePane after completion) |
+| Session fork | `lib/fork-session.mjs` (new), `lib/launch.mjs` (fork before launch) |
+| Resume | `lib/resume.mjs` (new pane + `--resume`), `lib/session-lock.mjs` (new) |
+| Summary extraction | `lib/summary.mjs` (read events.jsonl), `lib/launch.mjs` (call after completion) |
+| `subagent_done` tool | `extension.mjs` (register tool in child sessions) |
+| Backend preference | `lib/mux.mjs` (zellij first when both available) |
+| Manifest v2 | `lib/state.mjs` (schema), `lib/state-index.mjs` (propagation), all tests with `metadataVersion: 1` |
+
+### Verified Commands
+
+```bash
+# Dev inner loop
+npm test                           # all tests (~3s)
+npm run test:crap                  # CRAP < 8 for all targets
+npm run test:mutation              # mutation kill rate ≥ 80%
+
+# Deploy to test live
+cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+
+# Verify copilot sees the extension
+copilot extensions
+```
+
 ## Traceability
 
 - **Shared Key**: `interactive-subagents-v1`
@@ -62,20 +114,37 @@ Summary:
 | D9 | Manifest schema v2 (clean break, no v1 compat needed) | `[codebase]` `[user]` |
 | D10 | `subagent_done` tool for explicit self-termination | `[user]` `[codebase]` |
 
-## Specific Ideas Disposition
+## Validated Assumptions
 
-| Idea (from pi-interactive-subagents) | Disposition | Notes |
-|-------|-------------|-------|
-| `closeSurface()` after completion | Preserved | D1 — close pane after autonomous/interactive exit |
-| Session file persistence | Adapted | D2 — use Copilot CLI's native session system (`--resume=<UUID>`) instead of pi's raw `.jsonl` files |
-| `interactive: true/false` mode | Preserved | D3 — maps to `-i` vs `-p` Copilot CLI flags |
-| `fork: true` session forking | Adapted | D4 — directory copy instead of pi's `--fork <file>` flag |
-| `subagent_done` tool | Preserved | D10 — child agent calls this to signal completion; last assistant message before call becomes the summary |
-| `subagent_resume` tool | Adapted | D5 — uses `copilot --resume` instead of `pi --session <path>` |
-| Agent definitions (scout, worker, etc.) | Set Aside | Deferred to v2; `--agent` flag available when needed |
-| Session artifacts (write/read) | Set Aside | Deferred to v2 |
-| `/plan` command | Set Aside | Already handled by omc design skill |
-| `/iterate` command | Adapted | Interactive launch + fork covers this use case |
+Every assumption below was verified by a learning test (LT) before this spec was written. If any assumption becomes false in a future Copilot CLI version, the linked feature must be re-evaluated.
+
+| Assumption | Evidence | Status | If False |
+|-----------|----------|--------|----------|
+| `copilot --resume=<new-UUID>` creates a session dir at `~/.copilot/session-state/<UUID>/` | LT1: confirmed, UUID must be RFC 4122 | ✅ Proven | Session identity model breaks — must find alternative |
+| Fork via `cp -r session-state/<parent>/ <fork>/` + yaml id update preserves full context | LT2b: fork recalled all parent context, parent untouched (18 events before/after) | ✅ Proven | Fork feature breaks — need Copilot CLI fork API |
+| `-i "task"` + `--resume=<UUID>` work together for interactive resume | LT3: confirmed, full context retained | ✅ Proven | Interactive resume breaks — must use `-p` with sentinel |
+| `events.jsonl` contains `assistant.message` events with `data.content` for summary | LT5: confirmed, reliable across session types | ✅ Proven | Summary extraction breaks — fall back to workspace.yaml only |
+| Sentinel pattern (`__SUBAGENT_DONE_<code>__`) works unchanged with `--resume` | Existing codebase: sentinel is shell-level, independent of session flags | ✅ Proven | Autonomous completion detection breaks |
+
+## Cross-Cutting Invariants
+
+These rules apply to ALL services and ALL code paths. Violating any of these is a bug.
+
+1. **Safe task transport**: NEVER interpolate user-provided task strings directly into shell commands. Use the existing base64 env var pattern (`COPILOT_SUBAGENT_TASK_B64`). This prevents shell injection.
+
+2. **Panes are ephemeral, sessions are persistent**: A pane is a disposable view. A session lives at `~/.copilot/session-state/<UUID>/` and survives pane death. Destroying a pane does NOT destroy a session.
+
+3. **Manifest is the single source of launch state**: Every launch/resume/fork operation reads and writes the manifest at `.copilot-interactive-subagents/launches/<launchId>.json`. No in-memory-only state.
+
+4. **Lockfile before mutation**: Any operation that reads or mutates a session (resume, fork, summary extraction, terminal transition) MUST acquire the per-`copilotSessionId` lockfile first. Atomic `O_CREAT | O_EXCL`. Release on completion or process exit.
+
+5. **Sequence: extract → manifest → close**: After autonomous completion, ALWAYS extract summary BEFORE closing the pane. The sequence is: detect sentinel → extract summary → update manifest to terminal → close pane.
+
+6. **Autonomous panes are non-interactive**: User input in an autonomous (`-p`) pane is unsupported. No "user takeover" state transition exists. If the user wants to interact, they resume the session.
+
+7. **Existing flags preserved**: The launch command builder MUST preserve all flags from `createDefaultAgentLaunchCommand()` (`--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`, `-s`). v1 adds `--resume=<UUID>` and selects `-i`/`-p` — it does not remove anything.
+
+8. **Graceful degradation on missing data**: Summary extraction returns `null` (not crash) on missing session dir, empty events.jsonl, or truncated JSONL. Fork returns structured error (not crash) on disk full or permission errors.
 
 ## Architecture
 
@@ -169,34 +238,47 @@ Summary:
 - **Extension SDK**: `joinSession({ tools })` for tool registration
 - **Launch manifest store**: `.copilot-interactive-subagents/launches/<launchId>.json`
 
-### Key Interfaces
+### Service-by-Service Reference
 
-**Launch request (new parameters alongside existing):**
+Each service below includes its interface contract, file location, inline rationale, and acceptance criteria. Implement in the wave order from "Start Here".
+
+---
+
+#### Launch Command Builder (Wave 1) — Update `extension.mjs`
+
+Modifies `createDefaultAgentLaunchCommand()` to add `--resume=<UUID>` and select `-i`/`-p`.
+
 ```javascript
-{
-  // existing
-  agentIdentifier: string,    // "github-copilot" or custom agent name
-  task: string,               // prompt text
-  backend: "tmux" | "zellij", // optional, auto-detected
-  awaitCompletion: boolean,   // default: true for autonomous, false for interactive
+// Input: existing launch args + new v1 params
+// Output: command string array ready for shell execution
 
-  // new in v1
-  interactive: boolean,       // default: false. true = use -i flag, stay alive
-  fork: {                     // optional — fork from an existing session
-    launchId: string,         // look up copilotSessionId from this launch manifest
-  } | {
-    copilotSessionId: string, // fork directly from a known copilot session UUID
-  } | undefined,
-  closePaneOnCompletion: boolean, // default: true. false = keep pane alive
-}
-
-// Note: fork from the *current parent* session is not supported in v1 because
-// Copilot CLI does not expose its own session ID via environment variable or API.
-// The parent must provide a specific launchId or copilotSessionId to fork from.
+// Key behaviors:
+// - ALWAYS adds --resume=<copilotSessionId> (pre-generated UUID)
+// - interactive: true  → use -i "task", omit -s
+// - interactive: false → use -p "task", keep -s (existing behavior)
+// - All existing flags preserved: --allow-all-tools, --allow-all-paths, --allow-all-urls, --no-ask-user
+// - Task content via base64 env var (COPILOT_SUBAGENT_TASK_B64) — NEVER raw interpolation
 ```
 
-**Launch manifest v2:**
+**Rationale**: `-i` vs `-p` determines whether copilot stays alive for interaction (LT3 confirmed). `--resume=<UUID>` creates a session with a known ID so we can track, resume, and fork it (LT1 confirmed).
+
+**Test file**: `test/unit/launch-command.test.mjs` (new)
+
+**Acceptance criteria**:
+- `-i` flag present when `interactive: true`, `-p` flag present when `interactive: false`
+- `--resume=<UUID>` always present with valid RFC 4122 UUID
+- All existing flags from `createDefaultAgentLaunchCommand()` preserved
+- Task content survives shell metacharacters (quotes, newlines, `$`, backticks)
+- `-s` flag omitted when interactive (user needs to see output)
+
+---
+
+#### Manifest v2 Schema (Wave 1) — Update `lib/state.mjs`
+
+Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
+
 ```javascript
+// Launch manifest v2 shape:
 {
   // existing (preserved)
   launchId: string,
@@ -223,13 +305,178 @@ Summary:
 }
 ```
 
-**Resume request (v2 — new contract replacing legacy reattach):**
+**Rationale**: Clean break to v2 — no backward compatibility needed (no existing users). New fields track session identity and fork lineage for resume/fork operations.
+
+**Test file**: `test/state-store.test.mjs` (update existing)
+
+**Acceptance criteria**:
+- `metadataVersion: 2` in all new manifests
+- New fields serialize/deserialize correctly via JSON round-trip
+- `createManifestV2()` factory produces valid records with sensible defaults
+
+---
+
+#### `sessionLock` (Wave 2) — New `lib/session-lock.mjs`
+
+Per-`copilotSessionId` lockfile preventing concurrent access (TOCTOU races).
+
+```javascript
+// acquireLock(copilotSessionId) → { release: () => void }
+//   - Creates .copilot-interactive-subagents/locks/<copilotSessionId>.lock
+//   - Uses O_CREAT | O_EXCL for atomic creation
+//   - Throws SESSION_ACTIVE if lock already held
+//   - Registers cleanup handler for process exit
+
+// releaseLock(copilotSessionId) → void
+//   - Removes the lockfile
+//   - Idempotent (no error if already released)
+```
+
+**Rationale**: Without locking, two concurrent resume calls could both pass the "is session active?" check and create two panes for the same session, corrupting events.jsonl.
+
+**Test file**: `test/unit/session-lock.test.mjs` (new)
+
+**Acceptance criteria**:
+- First `acquireLock()` succeeds, second throws `SESSION_ACTIVE`
+- `release()` allows subsequent `acquireLock()` to succeed
+- Process exit cleanup removes lockfile (no stale locks after crash)
+- Lock directory created automatically if missing
+
+---
+
+#### `closePane` (Wave 2) — New `lib/close-pane.mjs`
+
+Closes a multiplexer pane by backend type.
+
+```javascript
+// closePane({ backend, paneId }) → void
+//
+// tmux:   spawnSync("tmux", ["kill-pane", "-t", paneId])
+// zellij: spawnSync("zellij", ["action", "close-pane"], { env: { ZELLIJ_PANE_ID: paneId } })
+//
+// Errors: throws on unknown backend, ignores "pane not found" (already gone)
+```
+
+**Rationale**: Panes are ephemeral (D1). After autonomous completion, close the pane to prevent sprawl. Session state persists at `~/.copilot/session-state/` regardless.
+
+**Test file**: `test/unit/close-pane.test.mjs` (new)
+
+**Acceptance criteria**:
+- Correct shell command for tmux backend
+- Correct shell command + env var for zellij backend
+- "Pane not found" errors are swallowed (idempotent close)
+- Unknown backend throws structured error
+
+---
+
+#### `extractSessionSummary` (Wave 2) — Update `lib/summary.mjs`
+
+Extracts summary from Copilot session state files, with delta support for resume.
+
+```javascript
+extractSessionSummary({ copilotSessionId, sinceEventIndex }) → {
+  summary: string | null,
+  source: "events.jsonl" | "workspace.yaml" | "fallback",
+  lastEventIndex: number     // for delta tracking on subsequent calls
+}
+
+// Implementation steps:
+// 1. Read ~/.copilot/session-state/<UUID>/events.jsonl
+// 2. Parse JSONL tolerantly (ignore truncated trailing lines)
+// 3. If sinceEventIndex provided, skip events before that index (delta extraction)
+// 4. Find last assistant.message event (after sinceEventIndex if provided)
+// 5. Return data.content + current event count as lastEventIndex
+// 6. If no new assistant.message found → return summary: null (do NOT reuse old summary)
+// 7. Fallback: workspace.yaml summary field (only when sinceEventIndex is not set)
+// 8. If session dir doesn't exist or events.jsonl is unreadable → return null gracefully
+```
+
+**Rationale**: After resume, we must only extract summary from NEW assistant messages. The manifest records `eventsBaseline` at launch/resume time and passes it as `sinceEventIndex` to avoid returning stale summaries (D7, LT5 confirmed).
+
+**Test file**: `test/unit/summary-extraction.test.mjs` (new)
+
+**Acceptance criteria**:
+- Returns last `assistant.message` content from events.jsonl
+- Delta mode: only considers events after `sinceEventIndex`
+- Returns `null` (not crash) when session dir missing
+- Returns `null` (not crash) when events.jsonl is empty
+- Handles truncated JSONL (partial trailing line ignored)
+- Falls back to workspace.yaml when `sinceEventIndex` not set and no assistant.message found
+
+---
+
+#### `forkSession` (Wave 3) — New `lib/fork-session.mjs`
+
+Copies a parent session directory to create an isolated child with full context.
+
+```javascript
+forkSession({ parentCopilotSessionId }) → {
+  forkCopilotSessionId: string,  // new UUID
+  sessionPath: string,           // path to forked session dir
+}
+
+// Implementation steps:
+// 1. Generate new UUID via crypto.randomUUID()
+// 2. Copy to temp dir first: cp -r <parent>/ <temp>/
+// 3. Update workspace.yaml id field in the temp copy
+// 4. Rename temp → final path (atomic on same filesystem)
+// 5. Return fork UUID and path
+//
+// On failure: remove temp dir, return structured error
+```
+
+**Rationale**: Fork gives a child agent full parent context without mutating the parent (D4, LT2b confirmed: parent had 18 events before/after, fork appended only to its own copy). Temp+rename prevents partial copies on disk-full.
+
+**Test file**: `test/unit/fork-session.test.mjs` (new)
+
+**Acceptance criteria**:
+- Fork directory contains copy of parent's events.jsonl
+- Fork's workspace.yaml has the NEW UUID as id
+- Parent's events.jsonl and workspace.yaml are untouched
+- Partial copy cleaned up on disk-full / permission error
+- UUID collision with existing session dir is handled
+
+---
+
+#### `subagent_done` Tool (Wave 3) — Update `extension.mjs`
+
+Tool registered in child sessions for explicit completion signaling.
+
+```javascript
+// Registered via joinSession({ tools: [...] }) in the child copilot process
+{
+  name: "subagent_done",
+  description: "Call when you have completed your task. Your last message becomes the summary returned to the parent.",
+  parameters: {},  // no parameters needed
+  execute: () => {
+    process.exit(0);
+    // Sentinel wrapper captures exit as __SUBAGENT_DONE_0__
+    // Parent reads last assistant.message from events.jsonl as summary
+  }
+}
+```
+
+**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). Without this, autonomous sessions rely on copilot naturally exiting, and interactive sessions rely on user Ctrl+D.
+
+**Test file**: `test/unit/subagent-done.test.mjs` (new)
+
+**Acceptance criteria**:
+- Tool is registered with correct name and empty parameters
+- Calling execute triggers `process.exit(0)`
+- Tool description instructs agent to put summary in last message
+
+---
+
+#### Resume Flow (Wave 4) — Update `lib/resume.mjs`
+
+Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
+
 ```javascript
 // Request
 {
   launchId: string,           // or via resumePointer/resumeReference
-  task: string | undefined,   // optional follow-up prompt. If omitted, opens prompt-less interactive session
-  awaitCompletion: boolean,   // default: false (resume is interactive by default)
+  task: string | undefined,   // optional follow-up prompt
+  awaitCompletion: boolean,   // default: false
 }
 
 // Response (success)
@@ -237,12 +484,12 @@ Summary:
   launchId: string,
   copilotSessionId: string,
   backend: string,
-  paneId: string,
-  status: "interactive",      // always interactive for resumed sessions
+  paneId: string,             // NEW pane
+  status: "interactive",
   resumePointer: { launchId, copilotSessionId, backend, paneId }
 }
 
-// Response (error — session currently active)
+// Response (error)
 {
   launchId: string,
   status: "error",
@@ -251,76 +498,68 @@ Summary:
 }
 ```
 
-**Close pane service (new injectable):**
+**Implementation flow**:
+1. Read manifest → get `copilotSessionId`
+2. Acquire sessionLock (reject with `SESSION_ACTIVE` if held)
+3. Verify session is quiescent (pane gone or process exited)
+4. Open new pane via backend
+5. If `task`: send `copilot --resume=<copilotSessionId> -i "task"` (safe transport)
+6. If no `task`: send `copilot --resume=<copilotSessionId> -i` (prompt-less)
+7. Record `eventsBaseline` (current event count for delta summary)
+8. Update manifest (status: "interactive", new paneId, eventsBaseline)
+9. Release lock
+
+**Rationale**: Sessions are the persistence layer, not panes (D5). Old pane was already closed (D1). Resume creates a fresh pane and restores full conversation context via `--resume` (LT3 confirmed).
+
+**Test file**: `test/resume.test.mjs` (update existing)
+
+**Acceptance criteria**:
+- New pane created (not reattached to old one)
+- `--resume=<copilotSessionId>` in launch command
+- `SESSION_ACTIVE` error when session is still running
+- `eventsBaseline` recorded in manifest for delta summary
+- Lock acquired before pane creation, released after
+
+---
+
+#### Launch Parameters (Tool Schema)
+
+New parameters added to the `copilot_subagent_launch` tool alongside existing ones:
+
 ```javascript
-// tmux
-closePane({ backend: "tmux", paneId }) →
-  tmux kill-pane -t <paneId>
-
-// zellij
-closePane({ backend: "zellij", paneId }) →
-  ZELLIJ_PANE_ID=<paneId> zellij action close-pane
-```
-
-**Summary extraction (new service):**
-```javascript
-extractSessionSummary({ copilotSessionId, sinceEventIndex }) → {
-  summary: string | null,
-  source: "events.jsonl" | "workspace.yaml" | "fallback",
-  lastEventIndex: number     // for delta tracking on subsequent calls
-}
-
-// Implementation:
-// 1. Read ~/.copilot/session-state/<UUID>/events.jsonl
-// 2. If sinceEventIndex provided, skip events before that index (delta extraction)
-// 3. Find last assistant.message event (after sinceEventIndex if provided)
-// 4. Return data.content + current event count as lastEventIndex
-// 5. If no new assistant.message found, return summary: null (do NOT reuse old summary)
-// 6. Fallback: workspace.yaml summary field (only when sinceEventIndex is not set)
-// 7. If session dir doesn't exist or events.jsonl is unreadable, return null gracefully
-```
-
-Delta tracking rationale: after resume, we must only extract summary from NEW
-assistant messages. The launch/resume manifest records `eventsBaseline` (event count
-at launch/resume time) and passes it as `sinceEventIndex` during extraction.
-
-**Fork service (new):**
-```javascript
-forkSession({ parentCopilotSessionId }) → {
-  forkCopilotSessionId: string,  // new UUID
-  sessionPath: string,           // path to forked session dir
-}
-
-// Implementation:
-// 1. Generate new UUID
-// 2. cp -r ~/.copilot/session-state/<parent>/ → <fork>/
-// 3. Update workspace.yaml id field
-// 4. Return fork UUID
-```
-
-**`subagent_done` tool (new — registered in child sessions):**
-```javascript
-// Registered as a Copilot CLI tool available to child agents.
-// When the child agent calls this tool, it signals task completion.
-// The last assistant message BEFORE this tool call becomes the summary.
 {
-  name: "subagent_done",
-  description: "Call when you have completed your task. Your last assistant message becomes the summary returned to the caller.",
-  parameters: {},  // no parameters
-  execute: () => {
-    // 1. Signal completion (process exits cleanly)
-    // 2. Sentinel wrapper detects exit code 0
-    // 3. Parent extracts last assistant message as summary
-    process.exit(0);
-  }
+  // existing
+  agentIdentifier: string,    // "github-copilot" or custom agent name
+  task: string,               // prompt text
+  backend: "tmux" | "zellij", // optional, auto-detected
+  awaitCompletion: boolean,   // default: true for autonomous, false for interactive
+
+  // new in v1
+  interactive: boolean,       // default: false. true = -i flag, stay alive
+  fork: {                     // optional — fork from an existing session
+    launchId: string,         // look up copilotSessionId from this launch manifest
+  } | {
+    copilotSessionId: string, // fork directly from a known copilot session UUID
+  } | undefined,
+  closePaneOnCompletion: boolean, // default: true. false = keep pane alive
 }
 
-// Integration: The subagent_done tool is injected into the child copilot
-// session via extension loading. When called, it triggers a clean process
-// exit which the sentinel wrapper captures as __SUBAGENT_DONE_0__.
-// For interactive sessions, it provides an explicit "I'm done" signal
-// instead of relying on the user to Ctrl+D.
+// Note: fork from the *current parent* session is not supported in v1 because
+// Copilot CLI does not expose its own session ID via environment variable or API.
 ```
+
+## Consolidated Error Codes
+
+All structured errors returned by v1 services, in one place:
+
+| Error Code | Returned By | Condition | User-Facing Message |
+|-----------|------------|-----------|---------------------|
+| `SESSION_ACTIVE` | resume, fork | Session has an active copilot process | "Session is currently active in another pane. Close or wait for completion before resuming." |
+| `SESSION_NOT_FOUND` | resume, fork | No manifest found for launchId | "No launch record found for this ID." |
+| `FORK_FAILED` | fork | Disk full, permissions, or copy error | "Failed to fork session: {reason}. No partial files left." |
+| `BACKEND_UNAVAILABLE` | launch, resume | Requested backend not detected | "Backend '{name}' is not available." |
+| `INVALID_FORK_TARGET` | launch | Fork parameter shape invalid | "Fork requires { launchId } or { copilotSessionId }." |
+| `PANE_OPEN_FAILED` | launch, resume | Backend refused to create pane | "Failed to open pane: {reason}." |
 
 ## What Changes
 
@@ -378,12 +617,6 @@ Before resume, fork, or summary extraction, the session must be **quiescent** (n
 **Detection method:** After acquiring the lock, check manifest `status`. If `"running"`, `"interactive"`, `"timeout"`, or `"cancelled"`, verify the `paneId` still exists and has an active copilot process. If pane is gone or process exited, update manifest to a terminal state (`"success"` if exit code 0, `"failure"` otherwise) and attempt best-effort summary extraction. Sessions in `"timeout"` or `"cancelled"` status must also be verified as quiescent — the child copilot may still be running.
 
 **Stale manifest reconciliation:** Before any operation that checks manifest status, reconcile stale states. If status is non-terminal but the pane no longer exists or the copilot process has exited, transition the manifest to a terminal state and attempt best-effort summary extraction. This prevents orphaned `"running"` manifests from blocking future operations.
-
-## Autonomous Pane Policy
-
-Autonomous panes (`interactive: false`) are **non-interactive**. User input in an autonomous pane is unsupported and behavior is undefined. The pane exists solely for observation — the user can watch progress but should not type. This simplifies the lifecycle: there is no "user takeover" state transition to handle.
-
-If the user wants to interact with a subagent, they should use `interactive: true` on launch, or resume a completed session.
 
 ## Timeout / Cancellation / Stalled Launch
 
@@ -556,12 +789,66 @@ E2E tests validate the full extension with **real Copilot CLI sessions** and **r
 - Timeout: 60s per test (copilot sessions are real and take time)
 - Skip gracefully if copilot CLI or multiplexer is not available (CI without tmux)
 
-## Validation Lenses
+### Cross-Service Scenario Matrix
 
-| Lens | Status | Notes |
-|------|--------|-------|
-| product-fit | ✅ Pass | Solves pane sprawl, session loss, and collaboration gap. No scope creep — agent definitions and session artifacts explicitly deferred. |
-| architecture-fit | ✅ Pass | Uses existing injectable service pattern, manifest store, backend abstraction. cmux compatibility explicitly defined. All existing flags preserved. |
-| operability | ✅ Pass | Lifecycle guards with lockfile prevent concurrent access. Fork uses temp+rename for atomicity. Summary extraction degrades gracefully. `subagent_done` tool provides explicit completion signal. |
-| traceability | ✅ Pass | Every decision (D1–D10) traced to source tags. Shared key `interactive-subagents-v1` links spec → decisions → exploration. |
-| change-impact | ✅ Pass | All impacted files enumerated including lib/mux.mjs, lib/parallel.mjs, lib/state-index.mjs, and affected test files. cmux degradation path defined. Resume contract fully specified with error responses. |
+These scenarios span multiple services and validate their integration. Each row is a test case for integration or e2e tests.
+
+| Scenario | Services Involved | Expected Outcome |
+|----------|-------------------|------------------|
+| Autonomous launch → completion → close → resume | launch, closePane, extractSessionSummary, resume, sessionLock | Pane opens → sentinel detected → summary extracted → pane closed → resume opens new pane → context restored |
+| Interactive launch → user exit → resume with task | launch, resume, sessionLock | Pane opens (no sentinel) → user Ctrl+D → resume with follow-up prompt → new pane with full context |
+| Fork → autonomous child → summary | forkSession, launch, extractSessionSummary, sessionLock | Parent copied → child launches → completes → summary from child only → parent events.jsonl unchanged |
+| Concurrent resume rejected | resume, sessionLock | First resume acquires lock → second resume gets `SESSION_ACTIVE` → first completes → second retry succeeds |
+| Launch with `closePaneOnCompletion: false` | launch, extractSessionSummary | Sentinel detected → summary extracted → pane NOT closed → manifest terminal |
+| Stale manifest reconciliation | launch, resume | Launch completed but manifest stuck as "running" → resume detects dead pane → reconciles to terminal → resume succeeds |
+| Pane disappears mid-autonomous | launch, extractSessionSummary | Pane existence check fails during poll → manifest → "failure" → best-effort summary extraction |
+| Timeout → later resume | launch, resume, sessionLock | Tool timeout fires → manifest "timeout" → pane stays alive → later resume creates new pane |
+| `subagent_done` → clean exit | subagent_done, extractSessionSummary | Child calls tool → process.exit(0) → sentinel `__SUBAGENT_DONE_0__` → last assistant message = summary |
+
+## Golden Path Examples
+
+### Example 1: Autonomous Launch (most common)
+
+```
+Parent agent calls copilot_subagent_launch({
+  agentIdentifier: "github-copilot",
+  task: "Write unit tests for the auth module",
+  backend: "tmux"
+})
+
+→ Extension generates copilotSessionId: "a1b2c3d4-..."
+→ Opens tmux pane, sends: node -e '...' (sentinel wrapper)
+   → Inside wrapper: copilot -p "$TASK" --resume=a1b2c3d4-... --allow-all-tools -s
+→ Writes manifest: { status: "running", copilotSessionId: "a1b2c3d4-...", ... }
+→ Polls pane output for __SUBAGENT_DONE_<code>__
+→ Sentinel found: __SUBAGENT_DONE_0__
+→ Reads ~/.copilot/session-state/a1b2c3d4-.../events.jsonl
+   → Last assistant.message: "I've created 5 unit tests in test/auth.test.js..."
+→ Updates manifest: { status: "success", summary: "I've created 5 unit tests...", exitCode: 0 }
+→ Closes tmux pane (kill-pane)
+→ Returns: { launchId: "xyz", status: "success", summary: "I've created 5 unit tests...",
+             resumePointer: { launchId: "xyz", copilotSessionId: "a1b2c3d4-..." } }
+```
+
+### Example 2: Fork + Interactive Resume
+
+```
+Parent agent calls copilot_subagent_launch({
+  agentIdentifier: "github-copilot",
+  task: "Continue improving the auth module with full context from previous work",
+  fork: { launchId: "xyz" },       ← fork from Example 1's session
+  interactive: true
+})
+
+→ Reads manifest "xyz" → copilotSessionId: "a1b2c3d4-..."
+→ Acquires lock on "a1b2c3d4-..."
+→ Copies ~/.copilot/session-state/a1b2c3d4-.../ → ~/.copilot/session-state/e5f6g7h8-.../
+→ Updates workspace.yaml id to "e5f6g7h8-..."
+→ Releases lock on "a1b2c3d4-..."
+→ Opens tmux pane, sends: copilot -i "$TASK" --resume=e5f6g7h8-... --allow-all-tools
+   (no sentinel wrapper — interactive mode)
+→ Writes manifest: { status: "interactive", copilotSessionId: "e5f6g7h8-...",
+                      fork: { parentCopilotSessionId: "a1b2c3d4-..." } }
+→ Returns immediately: { launchId: "abc", status: "interactive", ... }
+→ User works in pane. Original session "a1b2c3d4-..." is untouched.
+```
