@@ -1218,6 +1218,33 @@ function toToolResult(result) {
   };
 }
 
+const DEFAULT_TOOL_TIMEOUT_MS = 90_000;
+
+async function withToolTimeout(toolName, handler, args) {
+  let timer;
+  try {
+    return await Promise.race([
+      handler(args),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Tool ${toolName} timed out after ${DEFAULT_TOOL_TIMEOUT_MS}ms`)),
+          DEFAULT_TOOL_TIMEOUT_MS,
+        );
+        if (timer.unref) timer.unref();
+      }),
+    ]);
+  } catch (error) {
+    return toToolResult({
+      ok: false,
+      code: "TOOL_TIMEOUT",
+      message: error instanceof Error ? error.message : String(error),
+      guidance: "The tool call timed out. Retry with awaitCompletion: false, or investigate the tmux/backend state.",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function buildSdkTools(handlers) {
   const definitionsByName = Object.fromEntries(
     PUBLIC_TOOL_DEFINITIONS.map((definition) => [definition.name, definition]),
@@ -1227,14 +1254,14 @@ function buildSdkTools(handlers) {
     name: toolName,
     description: definitionsByName[toolName].description,
     parameters: PUBLIC_TOOL_PARAMETER_SCHEMAS[toolName],
-    handler: async (args) => toToolResult(await handlers[toolName](args ?? {})),
+    handler: async (args) => withToolTimeout(toolName, async (a) => toToolResult(await handlers[toolName](a ?? {})), args),
   }));
 
   const aliasTools = Object.entries(CAMELCASE_HANDLER_NAMES).map(([toolName, alias]) => ({
     name: alias,
     description: `${definitionsByName[toolName].description} (camelCase compatibility alias)`,
     parameters: PUBLIC_TOOL_PARAMETER_SCHEMAS[toolName],
-    handler: async (args) => toToolResult(await handlers[toolName](args ?? {})),
+    handler: async (args) => withToolTimeout(alias, async (a) => toToolResult(await handlers[toolName](a ?? {})), args),
   }));
 
   return [...namespacedTools, ...aliasTools];
@@ -1306,14 +1333,23 @@ export async function registerExtensionSession(options = {}) {
   const joinSession =
     options.joinSession ?? (await import("@github/copilot-sdk/extension")).joinSession;
   let session;
+  let enumerationCircuitOpen = false;
   const handlersFactory = options.createHandlers ?? createExtensionHandlers;
   const handlers = await handlersFactory({
     sessionWorkspacePath: () => session?.workspacePath,
     projectRoot: () => session?.workspacePath ?? process.cwd(),
     cwd: () => session?.workspacePath ?? process.cwd(),
     enumerateCustomAgents: async () => {
-      const result = await session.rpc.agent.list();
-      return result.agents ?? result.availableAgents ?? [];
+      if (enumerationCircuitOpen) {
+        return [];
+      }
+      try {
+        const result = await session.rpc.agent.list();
+        return result.agents ?? result.availableAgents ?? [];
+      } catch {
+        enumerationCircuitOpen = true;
+        return [];
+      }
     },
   });
 

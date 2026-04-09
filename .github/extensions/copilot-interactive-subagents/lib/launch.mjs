@@ -9,7 +9,7 @@ import {
 import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
 import { extractLaunchSummary, waitForLaunchCompletion } from "./summary.mjs";
 
-const DEFAULT_MONITOR_ATTEMPTS = 120;
+const DEFAULT_MONITOR_ATTEMPTS = 240;
 
 function normalizeExitCode(value, fallback = 1) {
   if (value === null || value === undefined) {

@@ -6,12 +6,32 @@ function uniqueStable(values = []) {
   return [...new Set(values.filter(Boolean))];
 }
 
-async function enumerateIdentifiers(enumerateCustomAgents) {
+const DEFAULT_ENUMERATE_TIMEOUT_MS = 500;
+
+async function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function enumerateIdentifiers(enumerateCustomAgents, { timeoutMs = DEFAULT_ENUMERATE_TIMEOUT_MS } = {}) {
   if (typeof enumerateCustomAgents !== "function") {
     return [];
   }
 
-  const agents = await enumerateCustomAgents();
+  const agents = await withTimeout(
+    enumerateCustomAgents(),
+    timeoutMs,
+    `Agent enumeration timed out after ${timeoutMs}ms`,
+  );
   return uniqueSorted((agents ?? []).map((agent) => agent?.identifier));
 }
 
