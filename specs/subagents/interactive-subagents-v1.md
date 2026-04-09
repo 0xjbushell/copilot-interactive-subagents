@@ -42,7 +42,7 @@ mkdir -p test/unit test/integration test/e2e
 | Session fork | `lib/fork-session.mjs` (new), `lib/launch.mjs` (fork before launch) |
 | Resume | `lib/resume.mjs` (new pane + `--resume`), `lib/session-lock.mjs` (new) |
 | Summary extraction | `lib/summary.mjs` (add `extractSessionSummary`), `lib/launch.mjs` (call after completion) |
-| `subagent_done` tool | `extension.mjs` (register tool — loaded via extension sidecar in child sessions with TTY) |
+| `subagent_done` tool | `extension.mjs` (register tool — loaded via extension sidecar in child sessions with TTY). Writes signal file to `.copilot-interactive-subagents/done/<copilotSessionId>`. Returns result (does NOT call `process.exit` — sidecar ≠ copilot process). |
 | Backend preference | `lib/mux.mjs` (zellij first when both available) |
 | Session liveness probing | `lib/mux.mjs` (backend-specific: `probeSessionLiveness`), `lib/launch.mjs` (backend-agnostic wrapper) |
 | Manifest v2 | `lib/state.mjs` (schema), `lib/state-index.mjs` (propagation), all tests with `metadataVersion: 1` |
@@ -516,35 +516,46 @@ forkSession({ parentCopilotSessionId }) → {
 
 Tool registered in child sessions for explicit completion signaling.
 
-**How it works**: Child copilot sessions launched in tmux panes have a real TTY, which means extensions load and `subagent_done` is registered via `joinSession({ tools })` in the child's extension sidecar. The tool triggers `process.exit(0)`.
+**How it works**: Child copilot sessions launched in tmux panes have a real TTY, which means extensions load and `subagent_done` is registered via `joinSession({ tools })` in the child's extension sidecar.
 
-- **In autonomous mode**: The sentinel wrapper around the copilot process captures exit as `__SUBAGENT_DONE_0__`. Parent detects sentinel, extracts summary, transitions manifest.
-- **In interactive mode**: There is NO sentinel wrapper (command sent directly to pane). `process.exit(0)` simply terminates the copilot process. The pane may close (if shell exits) or remain. Status transitions from `"interactive"` to terminal happen during **stale manifest reconciliation** (next resume/status check detects pane gone or process exited).
+**IMPORTANT: The extension sidecar is a SEPARATE process from the copilot parent.** `process.exit(0)` in the sidecar kills the sidecar, NOT copilot. The tool works via a different mechanism:
+
+1. Model calls `subagent_done` → tool writes a signal file (`.copilot-interactive-subagents/done/<copilotSessionId>`) and returns a result telling the model the task is complete.
+2. The tool's description instructs the model to put its summary in the last assistant message BEFORE calling this tool.
+3. After the tool returns, the model naturally ends the conversation (copilot exits).
+4. **Autonomous mode**: Copilot exits → sentinel wrapper captures exit code → parent detects sentinel.
+5. **Interactive mode**: Copilot exits → pane may close → reconciliation handles terminal transition.
+6. **Fallback**: If the model ignores the signal and continues, the parent's monitoring can detect the signal file during status checks.
 
 ```javascript
 // Registered automatically by the extension in any copilot session with a TTY
 // (tmux panes provide a TTY, so child subagents get this tool)
 {
   name: "subagent_done",
-  description: "Call when you have completed your task. Your last message becomes the summary returned to the parent.",
+  description: "Call when you have completed your task. Put your final summary in your last message BEFORE calling this tool. Your session will end after this call.",
   parameters: {},  // no parameters needed
-  execute: () => {
-    process.exit(0);
-    // Autonomous mode: sentinel wrapper captures exit as __SUBAGENT_DONE_0__
-    // Interactive mode: no wrapper; copilot exits, reconciliation handles transition
-    // Both modes: parent reads last assistant.message from events.jsonl as summary
+  execute: ({ copilotSessionId }) => {
+    // Write signal file for parent monitoring
+    const signalDir = path.join(STATE_DIR, "done");
+    fs.mkdirSync(signalDir, { recursive: true });
+    fs.writeFileSync(path.join(signalDir, copilotSessionId), Date.now().toString());
+    return { ok: true, message: "Task marked complete. Session ending." };
+    // Model reads this result and naturally concludes the conversation.
+    // Copilot exits → sentinel fires (autonomous) or reconciliation handles (interactive).
   }
 }
 ```
 
-**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). Without this, autonomous sessions rely on copilot naturally exiting, and interactive sessions rely on user Ctrl+D. Works because tmux panes provide a real TTY, and copilot forks extension sidecars when it detects a TTY (see Validated Assumptions).
+**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). The signal file provides a durable marker that survives pane/process death. The tool description is the primary mechanism — it instructs the model to conclude. Works because tmux panes provide a real TTY, and copilot forks extension sidecars when it detects a TTY (see Validated Assumptions).
 
 **Test file**: `test/unit/subagent-done.test.mjs` (new)
 
 **Acceptance criteria**:
 - Tool is registered with correct name and empty parameters
-- Calling execute triggers `process.exit(0)`
-- Tool description instructs agent to put summary in last message
+- Calling execute writes signal file to `.copilot-interactive-subagents/done/<copilotSessionId>`
+- Execute returns `{ ok: true, message: "..." }`
+- Tool description instructs agent to put summary in last message before calling
+- Signal file is detectable by parent's monitoring/status checks
 
 ---
 
@@ -736,7 +747,7 @@ Autonomous launches can fail to produce a sentinel. These are the terminal failu
 
 **On cancellation:** Best-effort pane close. If the pane can't be closed (already gone), that's fine. Manifest records `cancelled`. Session remains valid for resume.
 
-**Interactive mode timeout:** Interactive launches have no sentinel and no tool-level timeout (they return immediately). The only terminal events are: (a) user exiting copilot (Ctrl+D), (b) `subagent_done` tool calling `process.exit(0)`, or (c) copilot crashing. Status transitions from `"interactive"` to a terminal state happen during stale manifest reconciliation (see above). **Exit code for interactive sessions is always `null`** — there is no sentinel wrapper to capture it. Terminal status is determined by best-effort heuristic: if `events.jsonl` contains at least one assistant message, status is `"success"`; otherwise `"failure"`.
+**Interactive mode timeout:** Interactive launches have no sentinel and no tool-level timeout (they return immediately). The terminal events are: (a) user exiting copilot (Ctrl+D), (b) `subagent_done` tool writing signal file + model naturally concluding, or (c) copilot crashing. Status transitions from `"interactive"` to a terminal state happen during stale manifest reconciliation (see above) or when the signal file is detected. **Exit code for interactive sessions is always `null`** — there is no sentinel wrapper to capture it. Terminal status is determined by best-effort heuristic: if signal file exists OR `events.jsonl` contains at least one assistant message, status is `"success"`; otherwise `"failure"`.
 
 ## Failure Modes / Risks
 
