@@ -44,6 +44,7 @@ mkdir -p test/unit test/integration test/e2e
 | Summary extraction | `lib/summary.mjs` (add `extractSessionSummary`), `lib/launch.mjs` (call after completion) |
 | `subagent_done` tool | `extension.mjs` (register tool — loaded via extension sidecar in child sessions with TTY) |
 | Backend preference | `lib/mux.mjs` (zellij first when both available) |
+| Session liveness probing | `lib/mux.mjs` (backend-specific: `probeSessionLiveness`), `lib/launch.mjs` (backend-agnostic wrapper) |
 | Manifest v2 | `lib/state.mjs` (schema), `lib/state-index.mjs` (propagation), all tests with `metadataVersion: 1` |
 | Parallel passthrough | `lib/parallel.mjs` (pass new v1 params `interactive`, `fork`, `closePaneOnCompletion` to individual launches) |
 | Quality targets | `scripts/quality/targets.mjs` (add new v1 modules to CRAP/mutation targets) |
@@ -515,7 +516,10 @@ forkSession({ parentCopilotSessionId }) → {
 
 Tool registered in child sessions for explicit completion signaling.
 
-**How it works**: Child copilot sessions launched in tmux panes have a real TTY, which means extensions load and `subagent_done` is registered via `joinSession({ tools })` in the child's extension sidecar. The tool triggers `process.exit(0)`, which the sentinel wrapper in the parent pane captures as `__SUBAGENT_DONE_0__`.
+**How it works**: Child copilot sessions launched in tmux panes have a real TTY, which means extensions load and `subagent_done` is registered via `joinSession({ tools })` in the child's extension sidecar. The tool triggers `process.exit(0)`.
+
+- **In autonomous mode**: The sentinel wrapper around the copilot process captures exit as `__SUBAGENT_DONE_0__`. Parent detects sentinel, extracts summary, transitions manifest.
+- **In interactive mode**: There is NO sentinel wrapper (command sent directly to pane). `process.exit(0)` simply terminates the copilot process. The pane may close (if shell exits) or remain. Status transitions from `"interactive"` to terminal happen during **stale manifest reconciliation** (next resume/status check detects pane gone or process exited).
 
 ```javascript
 // Registered automatically by the extension in any copilot session with a TTY
@@ -526,8 +530,9 @@ Tool registered in child sessions for explicit completion signaling.
   parameters: {},  // no parameters needed
   execute: () => {
     process.exit(0);
-    // Sentinel wrapper captures exit as __SUBAGENT_DONE_0__
-    // Parent reads last assistant.message from events.jsonl as summary
+    // Autonomous mode: sentinel wrapper captures exit as __SUBAGENT_DONE_0__
+    // Interactive mode: no wrapper; copilot exits, reconciliation handles transition
+    // Both modes: parent reads last assistant.message from events.jsonl as summary
   }
 }
 ```
@@ -594,7 +599,9 @@ Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
 6. If no `task`: send `copilot --resume=<copilotSessionId> -i` (prompt-less)
 7. Record `eventsBaseline` (current event count for delta summary)
 8. Update manifest (status: "interactive", new paneId, eventsBaseline)
-9. Release lock
+9. Release lock (pane is now running — lock held only during setup)
+10. If `awaitCompletion`: monitor pane for process exit (polling, no lock held). On exit: re-acquire lock → extract summary → transition manifest to terminal → release lock → return awaited response. This two-phase locking prevents blocking other status queries during the (potentially long) copilot execution.
+11. If fire-and-forget: return pane metadata immediately
 
 **Rationale**: Sessions are the persistence layer, not panes (D5). Old pane was already closed (D1). Resume creates a fresh pane and restores full conversation context via `--resume` (LT3 confirmed).
 
@@ -703,6 +710,14 @@ Before resume, fork, or summary extraction, the session must be **quiescent** (n
 
 **Detection method:** After acquiring the lock, check manifest `status`. If `"running"`, `"interactive"`, `"timeout"`, or `"cancelled"`, verify the `paneId` still exists and has an active copilot process. If pane is gone or process exited, update manifest to a terminal state (`"success"` if exit code 0, `"failure"` otherwise) and attempt best-effort summary extraction. Sessions in `"timeout"` or `"cancelled"` status must also be verified as quiescent — the child copilot may still be running.
 
+**Probe service contract** — new injectable: `probeSessionLiveness(manifest) → { alive: boolean, exitCode: number | null }`:
+1. Check pane exists: `tmux has-pane -t <paneId>` (or zellij equivalent). If pane gone → `{ alive: false, exitCode: null }`.
+2. If pane exists, check for copilot process: `tmux list-panes -t <paneId> -F "#{pane_current_command}"`. If current command is NOT `copilot` (or node running copilot) → `{ alive: false, exitCode: null }`.
+3. If copilot process is running → `{ alive: true, exitCode: null }`.
+4. Exit code is `null` when probing (no reliable way to get it from a dead tmux process). For autonomous mode, exit code comes from the sentinel (`__SUBAGENT_DONE_<code>__`). For interactive mode, exit code is always `null` — terminal status is `"success"` if events.jsonl has content, `"failure"` otherwise.
+
+This service is used by lifecycle guards and `awaitCompletion` polling. Implementation lives in `lib/mux.mjs` (backend-specific) with a backend-agnostic wrapper in `lib/launch.mjs`.
+
 **Stale manifest reconciliation:** Before any operation that checks manifest status, reconcile stale states. If status is non-terminal but the pane no longer exists or the copilot process has exited, transition the manifest to a terminal state and attempt best-effort summary extraction. This prevents orphaned `"running"` manifests from blocking future operations.
 
 ## Timeout / Cancellation / Stalled Launch
@@ -721,7 +736,7 @@ Autonomous launches can fail to produce a sentinel. These are the terminal failu
 
 **On cancellation:** Best-effort pane close. If the pane can't be closed (already gone), that's fine. Manifest records `cancelled`. Session remains valid for resume.
 
-**Interactive mode timeout:** Interactive launches have no sentinel and no tool-level timeout (they return immediately). The only terminal event is the user exiting copilot (Ctrl+D). Status transitions from `"interactive"` to a terminal state happen during stale manifest reconciliation (see above).
+**Interactive mode timeout:** Interactive launches have no sentinel and no tool-level timeout (they return immediately). The only terminal events are: (a) user exiting copilot (Ctrl+D), (b) `subagent_done` tool calling `process.exit(0)`, or (c) copilot crashing. Status transitions from `"interactive"` to a terminal state happen during stale manifest reconciliation (see above). **Exit code for interactive sessions is always `null`** — there is no sentinel wrapper to capture it. Terminal status is determined by best-effort heuristic: if `events.jsonl` contains at least one assistant message, status is `"success"`; otherwise `"failure"`.
 
 ## Failure Modes / Risks
 
