@@ -10,8 +10,15 @@ This spec adds 6 capabilities to the existing extension: **ephemeral panes** (au
 
 ### What to Build (Implementation Waves)
 
+**Wave 0 (prerequisite):** Create test directory structure before writing any new test files:
+```bash
+mkdir -p test/unit test/integration test/e2e
+```
+
 | Wave | Service | File | Action | Depends On | Test File |
 |------|---------|------|--------|------------|-----------|
+| 0 | Test directory structure | `test/unit/`, `test/integration/`, `test/e2e/` | **Create dirs** | — | — |
+| 0 | Shared fixtures | `test/helpers/fixtures.mjs` | **New** | — | — |
 | 1 | Manifest v2 schema | `lib/state.mjs` | Update | — | `test/state-store.test.mjs` (update) |
 | 1 | Launch command builder | `extension.mjs` | Update | — | `test/unit/launch-command.test.mjs` (new) |
 | 2 | `sessionLock` | `lib/session-lock.mjs` | **New** | — | `test/unit/session-lock.test.mjs` (new) |
@@ -242,6 +249,55 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 
 Each service below includes its interface contract, file location, inline rationale, and acceptance criteria. Implement in the wave order from "Start Here".
 
+#### Dependency Injection Pattern (follow this for all new services)
+
+This codebase uses **constructor-style DI via plain async functions** — no classes, no DI framework. Dependencies are passed as a `services` object, with fallback to defaults imported at the top of the file. Tests inject mocks via the same `services` parameter.
+
+```javascript
+// === Pattern for NEW services (e.g., lib/close-pane.mjs) ===
+
+import { spawnSync as defaultSpawnSync } from "node:child_process";
+
+// Export a pure function. Dependencies come in via the services object.
+export async function closePane({ backend, paneId, services = {} }) {
+  const spawnSync = services.spawnSync ?? defaultSpawnSync;
+  // ... implementation using spawnSync ...
+}
+
+// === How tests inject mocks ===
+
+import { closePane } from "../../.github/extensions/copilot-interactive-subagents/lib/close-pane.mjs";
+
+it("GIVEN tmux backend WHEN closePane called THEN runs kill-pane", async () => {
+  const calls = [];
+  await closePane({
+    backend: "tmux",
+    paneId: "%1",
+    services: {
+      spawnSync: (cmd, args) => { calls.push({ cmd, args }); return { status: 0 }; },
+    },
+  });
+  assert.deepStrictEqual(calls[0], { cmd: "tmux", args: ["kill-pane", "-t", "%1"] });
+});
+
+// === Pattern for EXISTING services (e.g., lib/launch.mjs) ===
+// These use a resolve* helper to find deps from request, then services, then defaults:
+
+function resolveStateStore({ request, services = {} }) {
+  return request.stateStore ?? services.stateStore
+    ?? (request.createStateStore ?? services.createStateStore ?? defaultCreateStateStore)({
+      workspacePath: request.workspacePath,
+    });
+}
+
+// When updating existing services, add new deps to the existing resolve pattern:
+function resolveClosePane({ request, services = {} }) {
+  return request.closePane ?? services.closePane ?? defaultClosePane;
+}
+```
+
+**Key rule**: every external dependency (fs, child_process, other services) must be injectable via `services`. This is what makes the codebase testable without mock libraries.
+
 ---
 
 #### Launch Command Builder (Wave 1) — Update `extension.mjs`
@@ -276,6 +332,8 @@ Modifies `createDefaultAgentLaunchCommand()` to add `--resume=<UUID>` and select
 #### Manifest v2 Schema (Wave 1) — Update `lib/state.mjs`
 
 Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
+
+**Concrete change**: In `lib/state.mjs`, change `export const METADATA_VERSION = 1;` → `export const METADATA_VERSION = 2;` and add new fields to `createLaunchRecord()`. Update all tests that assert `metadataVersion: 1` (search: `grep -rn 'metadataVersion.*1' test/`).
 
 ```javascript
 // Launch manifest v2 shape:
@@ -660,15 +718,17 @@ Autonomous launches can fail to produce a sentinel. These are the terminal failu
 **Split test categories** — add separate npm scripts for fast feedback loops:
 ```json
 {
-  "test": "node --test test/*.test.mjs",
+  "test": "node --test test/*.test.mjs test/unit/*.test.mjs test/integration/*.test.mjs",
   "test:unit": "node --test test/unit/*.test.mjs",
   "test:integration": "node --test test/integration/*.test.mjs",
   "test:e2e": "node --test test/e2e/*.test.mjs",
-  "test:coverage": "c8 --reporter=text --reporter=json-summary node --test test/*.test.mjs",
+  "test:coverage": "c8 --reporter=text --reporter=json-summary node --test test/*.test.mjs test/unit/*.test.mjs",
   "test:crap": "node scripts/test-crap.mjs",
   "test:mutation": "node scripts/test-mutation.mjs"
 }
 ```
+
+**Note**: Existing tests live at `test/*.test.mjs` (flat). New v1 tests go in `test/unit/`. The `test` script must include BOTH globs so existing tests keep running. Existing tests stay where they are — do NOT move them.
 
 Coding agents run `test:unit` during development (~1s), `test` before committing (~3s), `test:e2e` for validation (~30-60s). Directory structure:
 ```
