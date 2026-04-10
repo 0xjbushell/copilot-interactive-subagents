@@ -222,7 +222,7 @@ export const TARGETED_MUTANTS = [...DEFAULT_TARGETED_MUTANTS];
 
 const QUALITY_TARGET_SCOPES = {
   default: {
-    testPattern: "test/*.test.mjs",
+    testPattern: "test/*.test.mjs test/unit/*.test.mjs",
     crapTargets: DETERMINISTIC_LOGIC_TARGETS,
     mutationTargets: TARGETED_MUTANTS,
   },

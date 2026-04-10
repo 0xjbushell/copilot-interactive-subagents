@@ -156,14 +156,14 @@ describe("quality gate helpers", () => {
     const plan = buildCrapRunPlan();
 
     assert.equal(plan.scope, "default");
-    assert.equal(plan.testPattern, "test/*.test.mjs");
+    assert.equal(plan.testPattern, "test/*.test.mjs test/unit/*.test.mjs");
     assert.deepEqual(plan.coverageCommand, [
       "npx",
       "c8",
       "--reporter=json",
       "node",
       "--test",
-      "test/*.test.mjs",
+      "test/*.test.mjs test/unit/*.test.mjs",
     ]);
     assert.ok(plan.crapTargets.includes(".github/extensions/copilot-interactive-subagents/extension.mjs"));
     assert.ok(plan.crapTargets.includes(".github/extensions/copilot-interactive-subagents/lib/titles.mjs"));
@@ -173,7 +173,7 @@ describe("quality gate helpers", () => {
     const plan = buildMutationRunPlan();
 
     assert.equal(plan.scope, "default");
-    assert.deepEqual(plan.testCommand, ["node", "--test", "test/*.test.mjs"]);
+    assert.deepEqual(plan.testCommand, ["node", "--test", "test/*.test.mjs test/unit/*.test.mjs"]);
     assert.ok(plan.mutationTargets.some((mutant) => mutant.id === "extension-normalize-request"));
     assert.ok(plan.mutationTargets.some((mutant) => mutant.id === "titles-unsupported-backend"));
   });
