@@ -73,8 +73,8 @@ npm run test:mutation              # mutation kill rate ≥ 80%
 # Deploy to test live
 cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
 
-# Verify copilot sees the extension
-copilot extensions
+# Verify copilot sees the extension (start a new copilot session — extensions load at startup)
+copilot -i "list your available tools"
 ```
 
 ## Traceability
@@ -147,6 +147,7 @@ Every assumption below was verified by a learning test (LT) before this spec was
 | `copilot --resume=<new-UUID>` creates a session dir at `~/.copilot/session-state/<UUID>/` | LT1: confirmed, UUID must be RFC 4122 | ✅ Proven | Session identity model breaks — must find alternative |
 | Fork via `cp -r session-state/<parent>/ <fork>/` + yaml id update preserves full context | LT2b: fork recalled all parent context, parent untouched (18 events before/after) | ✅ Proven | Fork feature breaks — need Copilot CLI fork API |
 | `-i "task"` + `--resume=<UUID>` work together for interactive resume | LT3: confirmed, full context retained | ✅ Proven | Interactive resume breaks — must use `-p` with sentinel |
+| Bare `--resume=<UUID>` (no `-i`, no `-p`) starts copilot in interactive mode | LT-B7: confirmed; bare `--resume` opens interactive session. Bare `-i` without prompt fails ("argument missing"). | ✅ Proven | Prompt-less resume would need alternative approach |
 | `events.jsonl` contains `assistant.message` events with `data.content` for summary | LT5: confirmed, reliable across session types | ✅ Proven | Summary extraction breaks — fall back to workspace.yaml only |
 | Sentinel pattern (`__SUBAGENT_DONE_<code>__`) works unchanged with `--resume` | Existing codebase: sentinel is shell-level, independent of session flags | ✅ Proven | Autonomous completion detection breaks |
 | Extension tools only load when copilot has a real TTY (tmux pane, terminal) — not when stdout is piped | LT: confirmed; `copilot -i` in tmux pane → extensions loaded; same command piped → no extensions. TTY detection controls extension sidecar forking. | ✅ Proven | E2E harness must use tmux panes (real PTY), not piped invocations |
@@ -158,23 +159,29 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 
 1. **Safe task transport**: NEVER interpolate user-provided task strings directly into shell commands. Use the existing base64 env var pattern (`COPILOT_SUBAGENT_TASK_B64`). This prevents shell injection.
 
-2. **Panes are ephemeral, sessions are persistent**: A pane is a disposable view. A session lives at `~/.copilot/session-state/<UUID>/` and survives pane death. Destroying a pane does NOT destroy a session.
+2. **Panes are ephemeral, sessions are persistent**: A pane is a disposable view. A session lives in the Copilot session-state directory (resolved at startup — see "Path Resolution" below) and survives pane death. Destroying a pane does NOT destroy a session.
 
 3. **Manifest is the single source of launch state**: Every launch/resume/fork operation reads and writes the manifest at `.copilot-interactive-subagents/launches/<launchId>.json`. No in-memory-only state.
 
-4. **Lockfile before mutation**: Any operation that **mutates** a session (resume, fork, terminal transition) MUST acquire the per-`copilotSessionId` lockfile first. Atomic `O_CREAT | O_EXCL`. Release on completion or process exit. **Read-only operations** (summary extraction) are exempt — `events.jsonl` is append-only by copilot, so reads are safe without locking.
+4. **Lockfile before mutation**: Any operation that **mutates** session state (resume, fork, terminal manifest transition) MUST acquire the per-`copilotSessionId` lockfile first. Atomic `O_CREAT | O_EXCL`. Release on completion. **Pure reads** (summary extraction that only returns data) are exempt — `events.jsonl` is append-only by copilot, so reads are safe without locking. **But**: any code path that reads AND then transitions state (e.g., extract summary → update manifest → close pane) MUST hold the lock for the entire sequence.
 
 5. **Sequence: extract → manifest → close**: After autonomous completion, ALWAYS extract summary BEFORE closing the pane. The sequence is: detect sentinel → extract summary → update manifest to terminal → close pane.
 
 6. **Autonomous panes are non-interactive**: User input in an autonomous (`-p`) pane is unsupported. No "user takeover" state transition exists. If the user wants to interact, they resume the session.
 
-7. **Existing flags preserved**: The launch command builder MUST preserve all flags from `createDefaultAgentLaunchCommand()` (`--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`). v1 adds `--resume=<UUID>` and selects `-i`/`-p`. For autonomous mode (`-p`), also keep `-s` (silent output). For interactive mode (`-i`), omit `-s` so the user sees copilot's UI.
+7. **Existing flags preserved**: The launch command builder MUST preserve all flags from `createDefaultAgentLaunchCommand()` (`--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`). v1 adds `--resume=<UUID>` and selects `-i`/`-p`. For autonomous mode (`-p`), also keep `-s` (suppress stats in output, useful for scripting). For interactive mode (`-i`), omit `-s` so the user sees copilot's full UI. **cmux backend**: skip `--resume` and v1 flags — cmux launches use legacy behavior (see cmux Compatibility).
 
 8. **Graceful degradation on missing data**: Summary extraction returns `null` (not crash) on missing session dir, empty events.jsonl, or truncated JSONL. Fork returns structured error (not crash) on disk full or permission errors.
 
-9. **Extension tools require a real TTY**: Extension sidecars are only forked when copilot detects a real TTY (e.g., tmux pane, terminal). Piped invocations and subshells do NOT load extensions. Subagent child sessions launched in tmux panes DO get extension tools (tmux provides a PTY). E2E tests must run copilot in tmux panes, not piped commands.
+9. **Extension tools require a real TTY**: Extension sidecars are only forked when copilot detects a real TTY (e.g., tmux pane, terminal). Piped invocations and subshells do NOT load extensions. Subagent child sessions launched in tmux panes DO get extension tools (tmux provides a PTY). E2E tests must run copilot in tmux panes, not piped commands. **Note**: This is observed behavior, not a documented API contract. The actual trigger appears to be the `SESSION_ID` environment variable set by copilot's runtime. If this behavior changes, E2E testing strategy must be re-evaluated.
 
-10. **Caller-owned locks**: The caller that acquires a lock is responsible for releasing it. Locks are NOT automatically released on operation completion — the caller must explicitly call `release()`. Process exit cleanup is a safety net, not the primary release mechanism.
+10. **Caller-owned locks**: The caller that acquires a lock is responsible for releasing it. Locks are NOT automatically released on operation completion — the caller must explicitly call `release()`. Process exit cleanup is a safety net for graceful shutdown only — **SIGKILL and hard crashes will leave stale locks** (see stale lock recovery in sessionLock contract).
+
+11. **Atomic file writes**: All manifest and index writes MUST use the temp-file + `rename()` pattern. Write to `<path>.tmp.<pid>`, then `fs.renameSync()` to the final path. This prevents concurrent readers from seeing truncated JSON. `rename()` is atomic on the same filesystem (POSIX guarantee, verified by learning test).
+
+12. **Path resolution**: Never hardcode `~/.copilot/`. Resolve the Copilot home directory at startup: check `COPILOT_HOME` env → `--config-dir` if passed → default `path.join(os.homedir(), '.copilot')`. Store the resolved path in a module-level constant. All session state paths derive from this.
+
+13. **Sync-first, async when proven needed**: The existing codebase uses `spawnSync` for all shell commands (tmux/zellij). This is correct — tool invocations block the Copilot model anyway. Do NOT refactor to async/await unless a concrete perf bottleneck is measured. `awaitCompletion` polling is the exception — it uses `setTimeout` loops to avoid blocking the tool timeout mechanism.
 
 ## Architecture
 
@@ -221,24 +228,24 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 **Autonomous launch (`interactive: false`, default):**
 1. Generate `copilotSessionId` (UUID)
 2. Open pane via backend (`tmux split-window` / `zellij action new-pane`)
-3. Build launch command: preserve all existing flags from `createDefaultAgentLaunchCommand()` (including `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`, `-s`), and add `--resume=<copilotSessionId>` and `-p "task"`. **Task transport must use the existing safe encoding pattern** (base64 env var or equivalent) — never raw shell interpolation of user-provided task strings.
-4. Wrap in node sentinel script, send to pane
-5. Write launch manifest (status: "running")
-6. Poll `readPaneOutput` for `__SUBAGENT_DONE_<code>__`
-7. Extract summary from session state files
-8. Update manifest (status: "success"/"failure", summary, exitCode)
-9. Close pane (`tmux kill-pane` / `zellij action close-pane`)
-10. Return result with `resumePointer`
+3. Write launch manifest (status: **"pending"**) — persist BEFORE sending command so crash recovery can find orphaned panes
+4. Build launch command: preserve all existing flags from `createDefaultAgentLaunchCommand()` (including `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`, `-s`), and add `--resume=<copilotSessionId>` and `-p "task"`. **Task transport must use the existing safe encoding pattern** (base64 env var or equivalent) — never raw shell interpolation of user-provided task strings. **cmux backend**: skip `--resume` and `-s` — use legacy command builder path.
+5. Wrap in node sentinel script, send to pane
+6. Update manifest (status: "running")
+7. Poll for sentinel (`__SUBAGENT_DONE_<code>__`) OR done signal file — whichever first
+8. Acquire lock → extract summary from session state files → update manifest (status: "success"/"failure", summary, exitCode) → close pane → release lock
+9. Return result with `resumePointer`
 
 **Interactive launch (`interactive: true`):**
 1. Generate `copilotSessionId` (UUID)
 2. Open pane via backend
-3. Build launch command: preserve all existing flags, add `--resume=<copilotSessionId>` and `-i "task"` (replace `-p` with `-i`, omit `-s` for interactive). **Same safe transport rules apply** — task content must not be interpolated raw into the shell command.
-4. Send to pane directly (no sentinel wrapper)
-5. Write launch manifest (status: "interactive")
-6. Return immediately with pane metadata and `resumePointer`
-7. User works in pane, exits via Ctrl+D
-8. On resume or status check: extract summary from session state
+3. Write launch manifest (status: **"pending"**)
+4. Build launch command: preserve all existing flags, add `--resume=<copilotSessionId>` and `-i "task"` (replace `-p` with `-i`, omit `-s` for interactive). **Same safe transport rules apply** — task content must not be interpolated raw into the shell command.
+5. Send to pane directly (no sentinel wrapper needed — user may interact)
+6. Update manifest (status: "interactive")
+7. Return immediately with pane metadata and `resumePointer`
+8. User works in pane, exits via Ctrl+D
+9. On resume or status check: extract summary from session state
 
 **Fork launch (`fork: { launchId }` or `fork: { copilotSessionId }`):**
 1. Resolve parent's `copilotSessionId` (from manifest if `launchId` provided, or use directly)
@@ -253,18 +260,19 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 2. Verify session is quiescent (see Lifecycle Guards below); reject if active
 3. Open new pane via backend
 4. If `task` provided: send `copilot --resume=<copilotSessionId> -i "task"` (using safe transport)
-5. If no `task`: send `copilot --resume=<copilotSessionId> -i` (prompt-less resume; copilot opens with prior context, user types interactively)
-6. Record `eventsBaseline` (current event count in session's events.jsonl) for delta summary
+5. If no `task`: send `copilot --resume=<copilotSessionId>` (bare `--resume` without `-i`; copilot opens with prior context in interactive mode. **Learning test confirmed**: bare `-i` without a prompt argument fails with "argument missing"; bare `--resume` without `-i` starts interactive mode successfully.)
+6. Record `eventsBaseline` **BEFORE step 3** (current event count in session's events.jsonl) for delta summary — must be captured under lock before the child starts writing events
 7. Update manifest (status: "interactive", paneId: new pane, eventsBaseline)
-7. If `awaitCompletion`: monitor for process exit, extract summary
-8. If fire-and-forget: return pane metadata immediately
+8. Release lock (pane is now running — lock held only during setup)
+9. If `awaitCompletion`: monitor for process exit, extract summary (re-acquire lock for terminal transition)
+10. If fire-and-forget: return pane metadata immediately
 
 ### Integration Points
 
-- **Copilot CLI**: `--resume=<UUID>`, `-i`/`-p` flags, `--allow-all-tools`, `--agent`, `-s`
-- **Copilot session state**: `~/.copilot/session-state/<UUID>/` directory structure
+- **Copilot CLI**: `--resume=<UUID>`, `-i`/`-p` flags, `--allow-all-tools`, `--agent`, `-s` (suppress stats, not all output)
+- **Copilot session state**: Resolved Copilot home directory (default `~/.copilot/`) + `session-state/<UUID>/`
 - **tmux**: `split-window`, `send-keys`, `capture-pane`, `kill-pane`, `list-panes`
-- **zellij**: `action new-pane`, `action write-chars`, `action dump-screen`, `action close-pane`
+- **zellij**: `action new-pane`, `action write-chars`, `action dump-screen`, `action close-pane`. **Known gap**: Zellij pane liveness probe is less mature than tmux — `zellij action list-clients` may not reliably indicate pane state. If liveness checking is unreliable during implementation, document it and fall back to `zellij action dump-screen` (which errors on dead panes).
 - **Extension SDK**: `joinSession({ tools })` for tool registration
 - **Launch manifest store**: `.copilot-interactive-subagents/launches/<launchId>.json`
 
@@ -328,15 +336,18 @@ function resolveClosePane({ request, services = {} }) {
 Modifies `createDefaultAgentLaunchCommand()` to add `--resume=<UUID>` and select `-i`/`-p`.
 
 ```javascript
-// Input: existing launch args + new v1 params
+// Input: existing launch args + new v1 params + backend
 // Output: single shell command string (NOT an array) — same contract as current code
 
 // Key behaviors:
-// - ALWAYS adds --resume=<copilotSessionId> (pre-generated UUID)
+// - For tmux/zellij: adds --resume=<copilotSessionId> (pre-generated UUID)
+// - For cmux: skips --resume and v1 flags (legacy path, copilotSessionId null in manifest)
 // - interactive: true  → use -i "task", omit -s
-// - interactive: false → use -p "task", keep -s (existing behavior)
+// - interactive: false → use -p "task", keep -s (suppress stats, existing behavior)
+// - Prompt-less (no task): use bare --resume=<UUID> without -i or -p (copilot defaults to interactive)
 // - All existing flags preserved: --allow-all-tools, --allow-all-paths, --allow-all-urls, --no-ask-user
 // - Task content via base64 env var (COPILOT_SUBAGENT_TASK_B64) — NEVER raw interpolation
+// - MUST set env vars: COPILOT_SUBAGENT_SESSION_ID=<copilotSessionId> and COPILOT_SUBAGENT_LAUNCH_ID=<launchId>
 ```
 
 **Rationale**: `-i` vs `-p` determines whether copilot stays alive for interaction (LT3 confirmed). `--resume=<UUID>` creates a session with a known ID so we can track, resume, and fork it (LT1 confirmed).
@@ -375,7 +386,7 @@ Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
   metadataVersion: 2,         // bumped from 1
 
   // new fields
-  copilotSessionId: string,   // UUID for copilot --resume
+  copilotSessionId: string | null, // UUID for copilot --resume; null for cmux backend
   interactive: boolean,       // true if launched with -i
   fork: {                     // present if forked
     parentCopilotSessionId: string,
@@ -387,6 +398,8 @@ Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
 ```
 
 **Rationale**: Clean break to v2 — no backward compatibility needed (no existing users). New fields track session identity and fork lineage for resume/fork operations.
+
+**Atomic writes**: ALL manifest writes (create, update, merge) MUST use the temp+rename pattern: `fs.writeFileSync(path + '.tmp.' + process.pid, data)` then `fs.renameSync(tmpPath, path)`. This prevents concurrent readers from seeing truncated JSON. `rename()` is atomic on the same filesystem (POSIX guarantee, confirmed by learning test).
 
 **Test file**: `test/state-store.test.mjs` (update existing)
 
@@ -405,21 +418,28 @@ Per-`copilotSessionId` lockfile preventing concurrent access (TOCTOU races).
 // acquireLock({ copilotSessionId, services? }) → { release: () => void }
 //   - Creates .copilot-interactive-subagents/locks/<copilotSessionId>.lock
 //   - Uses O_CREAT | O_EXCL for atomic creation
-//   - Throws SESSION_ACTIVE if lock already held
-//   - Registers process.on("exit") cleanup as safety net
+//   - Lockfile contents: JSON { pid: number, startedAt: number } (for stale detection)
+//   - If lock file exists:
+//     1. Read contents, check if owner PID is still alive (process.kill(pid, 0))
+//     2. If owner is dead → stale lock → delete and retry acquire
+//     3. If owner is alive → throw SESSION_ACTIVE
+//   - Registers process.on("exit") cleanup as SAFETY NET ONLY
+//     (SIGKILL/hard crash WILL leave stale locks — that's why PID-based recovery exists)
 //   - release() removes lockfile — idempotent (no error if already released)
 //   - There is NO separate releaseLock export — caller uses the returned release function
 ```
 
-**Rationale**: Without locking, two concurrent resume calls could both pass the "is session active?" check and create two panes for the same session, corrupting events.jsonl.
+**Rationale**: Without locking, two concurrent resume calls could both pass the "is session active?" check and create two panes for the same session, corrupting events.jsonl. Stale lock recovery via PID check handles the SIGKILL/crash case (confirmed by learning test: `process.on("exit")` does NOT fire on SIGKILL).
 
 **Test file**: `test/unit/session-lock.test.mjs` (new)
 
 **Acceptance criteria**:
 - First `acquireLock()` succeeds, second throws `SESSION_ACTIVE`
 - `release()` allows subsequent `acquireLock()` to succeed
-- Process exit cleanup removes lockfile (no stale locks after crash)
+- Stale lock (PID dead) is automatically recovered — acquire succeeds
+- Lockfile contains `{ pid, startedAt }` JSON
 - Lock directory created automatically if missing
+- Process exit cleanup removes lockfile (graceful shutdown only — SIGKILL leaves stale lock, which is recovered by PID check)
 
 ---
 
@@ -465,7 +485,7 @@ extractSessionSummary({ copilotSessionId, sinceEventIndex }) → {
 }
 
 // Implementation steps:
-// 1. Build path: path.join(os.homedir(), '.copilot', 'session-state', copilotSessionId, 'events.jsonl')
+// 1. Build path: use resolved Copilot home directory (see invariant 12) + 'session-state/<copilotSessionId>/events.jsonl'
 //    NOTE: Do NOT use '~/' — it is not expanded by Node path APIs.
 // 2. Parse JSONL tolerantly (ignore truncated trailing lines)
 // 3. If sinceEventIndex provided, skip events before that index (delta extraction)
@@ -480,6 +500,8 @@ extractSessionSummary({ copilotSessionId, sinceEventIndex }) → {
 ```
 
 **Rationale**: After resume, we must only extract summary from NEW assistant messages. The manifest records `eventsBaseline` at launch/resume time and passes it as `sinceEventIndex` to avoid returning stale summaries (D7, LT5 confirmed).
+
+**Quiescence concern**: `events.jsonl` is written by copilot while the parent may read it. Since copilot writes complete JSON lines atomically (one `write()` per event), partial lines only occur if copilot crashes mid-write. The tolerant JSONL parser handles this by ignoring unparseable trailing lines. For the **final** summary extraction (in the completion pipeline, after sentinel/signal fires), copilot has already exited — the file is stable. For **mid-session** reads (status checks), partial data is acceptable since these are informational.
 
 **Test file**: `test/unit/summary-extraction.test.mjs` (new)
 
@@ -532,14 +554,14 @@ Tool registered in child sessions for explicit completion signaling.
 
 **How it works**: Child copilot sessions launched in tmux panes have a real TTY, which means extensions load and `subagent_done` is registered via `joinSession({ tools })` in the child's extension sidecar.
 
-**IMPORTANT: The extension sidecar is a SEPARATE process from the copilot parent.** `process.exit(0)` in the sidecar kills the sidecar, NOT copilot. The tool works via a different mechanism:
+**IMPORTANT: The extension sidecar is a SEPARATE process from the copilot parent.** `process.exit(0)` in the sidecar kills the sidecar, NOT copilot. The tool is a **durable marker**, not a termination mechanism:
 
 1. Model calls `subagent_done` → tool writes a signal file (`.copilot-interactive-subagents/done/<copilotSessionId>`) and returns a result telling the model the task is complete.
 2. The tool's description instructs the model to put its summary in the last assistant message BEFORE calling this tool.
-3. After the tool returns, the model naturally ends the conversation (copilot exits).
-4. **Autonomous mode**: Copilot exits → sentinel wrapper captures exit code → parent detects sentinel.
-5. **Interactive mode**: Copilot exits → pane may close → reconciliation handles terminal transition.
-6. **Fallback**: If the model ignores the signal and continues, the parent's monitoring can detect the signal file during status checks.
+3. **The tool CANNOT force copilot to exit.** After the tool returns, the model may naturally end the conversation — but this is nondeterministic. The tool is one completion signal source, not the only one.
+4. **Autonomous mode**: Parent monitors BOTH sentinel wrapper AND signal file. Whichever fires first triggers the completion pipeline. The sentinel (copilot process exit → wrapper writes exit code) is the authoritative source for exit code.
+5. **Interactive mode**: Copilot exits when user Ctrl+D's or model concludes. Reconciliation handles terminal transition.
+6. **Fallback**: If the model ignores the signal and continues, the parent's monitoring can detect the signal file during status checks and note it, but should NOT force-terminate solely based on the signal file while the pane/process is still alive.
 
 ```javascript
 // Registered automatically by the extension in any copilot session with a TTY
@@ -549,27 +571,38 @@ Tool registered in child sessions for explicit completion signaling.
   description: "Call when you have completed your task. Put your final summary in your last message BEFORE calling this tool. Your session will end after this call.",
   parameters: {},  // no parameters needed
   execute: ({ copilotSessionId }) => {
-    // Write signal file for parent monitoring
+    // copilotSessionId is injected into child env as COPILOT_SUBAGENT_SESSION_ID
+    // launchId is injected as COPILOT_SUBAGENT_LAUNCH_ID
+    // (both set by the parent's launch command builder)
+    const launchId = process.env.COPILOT_SUBAGENT_LAUNCH_ID || "unknown";
     const signalDir = path.join(STATE_DIR, "done");
     fs.mkdirSync(signalDir, { recursive: true });
-    fs.writeFileSync(path.join(signalDir, copilotSessionId), Date.now().toString());
+    fs.writeFileSync(path.join(signalDir, copilotSessionId), `${Date.now()}|${launchId}`);
     return { ok: true, message: "Task marked complete. Session ending." };
-    // Model reads this result and naturally concludes the conversation.
-    // Copilot exits → sentinel fires (autonomous) or reconciliation handles (interactive).
+    // Model reads this result and may conclude the conversation.
+    // Sentinel remains the authoritative completion/exit-code source for autonomous mode.
   }
 }
 ```
 
-**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). The signal file provides a durable marker that survives pane/process death. The tool description is the primary mechanism — it instructs the model to conclude. Works because tmux panes provide a real TTY, and copilot forks extension sidecars when it detects a TTY (see Validated Assumptions).
+**Session ID injection**: The parent's launch command builder MUST set two environment variables in the pane command: (1) `COPILOT_SUBAGENT_SESSION_ID=<copilotSessionId>` and (2) `COPILOT_SUBAGENT_LAUNCH_ID=<launchId>`. The child extension reads these to know which session to write the signal file for and which launch generation it belongs to. (Note: Copilot CLI does not expose its own session ID via env or API — see Scope/Out.)
+
+**Stale signal file cleanup**: On resume, delete any existing signal file for the session BEFORE launching the child. This prevents a stale signal from a prior run triggering immediate false completion. The parent also injects a `COPILOT_SUBAGENT_LAUNCH_ID=<launchId>` env var alongside the session ID. The signal file content includes the launchId so the parent can verify the signal matches the current launch (not a leftover from a prior run that raced with cleanup). Content format: `<timestamp>|<launchId>`.
+
+**Multi-source completion model**: Subagent completion can be detected from multiple independent sources: (1) sentinel wrapper exit code (autonomous mode), (2) signal file from `subagent_done`, (3) pane death/process exit detected by probe, (4) reconciliation discovering terminal manifest + dead pane. The completion pipeline is idempotent — whichever source fires first triggers extract→manifest→close, and subsequent triggers are no-ops (manifest already terminal). This redundancy is intentional; no single source is a SPOF.
+
+**Rationale**: Provides an explicit "I'm done" signal for both autonomous and interactive sessions (D10). The signal file provides a durable marker that survives pane/process death. The tool description is the primary mechanism — it instructs the model to conclude. **The tool is a hint, not a guarantee** — the sentinel wrapper and pane monitoring remain the authoritative completion sources. Works because tmux panes provide a real TTY, and copilot forks extension sidecars when it detects a TTY (see Validated Assumptions).
 
 **Test file**: `test/unit/subagent-done.test.mjs` (new)
 
 **Acceptance criteria**:
 - Tool is registered with correct name and empty parameters
-- Calling execute writes signal file to `.copilot-interactive-subagents/done/<copilotSessionId>`
-- Execute returns `{ ok: true, message: "..." }`
+- Calling execute writes signal file to `.copilot-interactive-subagents/done/<copilotSessionId>` with content `<timestamp>|<launchId>`
+- Execute returns `{ ok: true, message: "..." }` — does NOT call process.exit()
+- Tool reads COPILOT_SUBAGENT_SESSION_ID and COPILOT_SUBAGENT_LAUNCH_ID from env
 - Tool description instructs agent to put summary in last message before calling
 - Signal file is detectable by parent's monitoring/status checks
+- Stale signal files from prior runs are cleaned up on resume (before child launch)
 
 ---
 
@@ -617,26 +650,32 @@ Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
 
 **Implementation flow**:
 1. Read manifest → get `copilotSessionId`
-2. Acquire sessionLock (reject with `SESSION_ACTIVE` if held)
+2. Acquire sessionLock (reject with `SESSION_ACTIVE` if held — includes stale lock recovery via PID check)
 3. Verify session is quiescent (pane gone or process exited)
-4. Open new pane via backend
-5. If `task`: send `copilot --resume=<copilotSessionId> -i "task"` (safe transport)
-6. If no `task`: send `copilot --resume=<copilotSessionId> -i` (prompt-less)
-7. Record `eventsBaseline` (current event count for delta summary)
-8. Update manifest (status: "interactive", new paneId, eventsBaseline)
-9. Release lock (pane is now running — lock held only during setup)
-10. If `awaitCompletion`: monitor pane for process exit (polling, no lock held). On exit: re-acquire lock → extract summary → transition manifest to terminal → release lock → return awaited response. This two-phase locking prevents blocking other status queries during the (potentially long) copilot execution.
-11. If fire-and-forget: return pane metadata immediately
+4. Record `eventsBaseline` (current event count for delta summary) — **MUST capture BEFORE launching child** to avoid missing early events
+5. Clean up stale signal file: delete `.copilot-interactive-subagents/done/<copilotSessionId>` if exists (prevents false completion from prior run)
+6. Open new pane via backend
+7. If `task`: send `copilot --resume=<copilotSessionId> -i "task"` (safe transport)
+8. If no `task`: send `copilot --resume=<copilotSessionId>` (bare `--resume` — copilot defaults to interactive. **Do NOT use bare `-i` without a prompt** — it fails with "argument missing".)
+9. Update manifest (status: "interactive", new paneId, eventsBaseline)
+10. Release lock (pane is now running — lock held only during setup)
+11. If `awaitCompletion`: monitor pane for process exit (polling, no lock held). On exit: re-acquire lock → extract summary → transition manifest to terminal → release lock → return awaited response. This two-phase locking prevents blocking other status queries during the (potentially long) copilot execution.
+12. If fire-and-forget: return pane metadata immediately
+
+**Architecture note**: This is a **full replacement** of the current pane-reattach model in `lib/resume.mjs`, not a patch. Current resume validates existing paneId and reattaches. New resume creates a NEW pane and uses `copilot --resume` to restore context. The old code path is removed.
 
 **Rationale**: Sessions are the persistence layer, not panes (D5). Old pane was already closed (D1). Resume creates a fresh pane and restores full conversation context via `--resume` (LT3 confirmed).
 
 **Test file**: `test/resume.test.mjs` (update existing)
 
 **Acceptance criteria**:
-- New pane created (not reattached to old one)
+- New pane created (not reattached to old one) — this is a full replacement of legacy reattach
 - `--resume=<copilotSessionId>` in launch command
-- `SESSION_ACTIVE` error when session is still running
-- `eventsBaseline` recorded in manifest for delta summary
+- Prompt-less resume uses bare `--resume` (no `-i` flag) — NOT `--resume -i`
+- Resume with task uses `--resume=<id> -i "task"`
+- `SESSION_ACTIVE` error when session is still running (including stale lock recovery)
+- `eventsBaseline` recorded in manifest BEFORE child launch for accurate delta summary
+- Stale signal file cleaned up before child launch
 - Lock acquired before pane creation, released after
 
 ---
@@ -690,12 +729,12 @@ All structured errors use the envelope `{ ok: false, code: "<ERROR_CODE>", messa
 - New injectable service: `forkSession`
 - New injectable service: `sessionLock` (per-copilotSessionId lockfile management)
 - New tool: `subagent_done` (registered in child sessions for explicit completion)
-- Lock directory: `.copilot-interactive-subagents/locks/`
+- Lock directory: `.copilot-interactive-subagents/locks/` (workspace-local — same directory as launches. **Design note**: If multiple Copilot parent sessions share the same working directory, locks are naturally shared. If each parent uses a separate working directory, locks are implicitly per-parent. This is the simpler model and correct for v1. A user-global lock directory could be considered in v2 if cross-workspace coordination becomes needed.)
 
 ### Updated Artifacts
 - `extension.mjs` — launch command builder (add `--resume`, `-i`/`-p` selection), pane lifecycle (add closePane after completion), backend preference (zellij first)
 - `lib/state.mjs` — manifest schema v2 (new fields, version bump, v1 defaults)
-- `lib/state-index.mjs` — metadata propagation for new manifest fields
+- `lib/state-index.mjs` — metadata propagation for new manifest fields. **CRITICAL**: The launch index (`launch-index.json`) must use atomic writes (temp+rename) AND a single-writer mutex to prevent lost-update races during parallel launches. Without this, parallel launches A and B can both read the index, each add their entry, and overwrite each other. Options: (a) per-launch shard files instead of a single index, (b) file lock (flock/O_EXCL) around read-modify-write, (c) append-only JSONL index.
 - `lib/launch.mjs` — integrate closePane, session ID generation, fork
 - `lib/resume.mjs` — new resume flow (new pane + `--resume=<copilotSessionId>`, error responses)
 - `lib/summary.mjs` — add session-file-based summary extraction alongside sentinel
@@ -731,19 +770,19 @@ Before resume, fork, or summary extraction, the session must be **quiescent** (n
 | Close pane during extraction | Extraction must complete before closePane is called | Enforced by sequencing (extract → manifest → close) |
 | Fork during parent writes | Parent pane must be closed or copilot process exited | `SESSION_ACTIVE` error |
 
-**Locking:** All operations that read/mutate a session (resume, fork, summary extraction, manifest terminal transition) must acquire a per-`copilotSessionId` lockfile before proceeding. The lockfile lives at `.copilot-interactive-subagents/locks/<copilotSessionId>.lock`. Use atomic `O_CREAT | O_EXCL` creation; release on operation completion (or process exit via cleanup handler). This prevents TOCTOU races where two concurrent resume/fork calls both pass quiescence checks.
+**Locking:** Operations that **mutate** session state (resume, fork, terminal manifest transition including the completion pipeline) must acquire a per-`copilotSessionId` lockfile before proceeding. Pure read-only operations (summary extraction that only returns data without updating manifest) are exempt. The lockfile lives at `.copilot-interactive-subagents/locks/<copilotSessionId>.lock`. Contains `{ pid, startedAt }` for stale recovery. Use atomic `O_CREAT | O_EXCL` creation; release on operation completion. Stale locks (owner PID dead) are automatically recovered on next acquire attempt. This prevents TOCTOU races where two concurrent resume/fork calls both pass quiescence checks.
 
 **Detection method:** After acquiring the lock, check manifest `status`. If `"running"`, `"interactive"`, `"timeout"`, or `"cancelled"`, verify the `paneId` still exists and has an active copilot process. If pane is gone or process exited, update manifest to a terminal state (`"success"` if exit code 0, `"failure"` otherwise) and attempt best-effort summary extraction. Sessions in `"timeout"` or `"cancelled"` status must also be verified as quiescent — the child copilot may still be running.
 
 **Probe service contract** — new injectable: `probeSessionLiveness(manifest) → { alive: boolean, exitCode: number | null }`:
-1. Check pane exists: `tmux has-pane -t <paneId>` (or zellij equivalent). If pane gone → `{ alive: false, exitCode: null }`.
-2. If pane exists, check for copilot process: `tmux list-panes -t <paneId> -F "#{pane_current_command}"`. If current command is NOT `copilot` (or node running copilot) → `{ alive: false, exitCode: null }`.
+1. Check pane exists: `tmux display-message -p -t <paneId> "#{pane_id}"` (returns pane ID if exists, errors if not). For zellij: use `zellij action list-clients` or equivalent with `--pane-id`. If pane gone → `{ alive: false, exitCode: null }`.
+2. If pane exists, check for copilot process: `tmux list-panes -t <paneId> -F "#{pane_current_command}"`. Note: with the sentinel wrapper, command may show `node` not `copilot`. Check for the node sentinel process specifically, or verify pane has an active foreground process.
 3. If copilot process is running → `{ alive: true, exitCode: null }`.
 4. Exit code is `null` when probing (no reliable way to get it from a dead tmux process). For autonomous mode, exit code comes from the sentinel (`__SUBAGENT_DONE_<code>__`). For interactive mode, exit code is always `null` — terminal status is `"success"` if events.jsonl has content, `"failure"` otherwise.
 
 This service is used by lifecycle guards and `awaitCompletion` polling. Implementation lives in `lib/mux.mjs` (backend-specific) with a backend-agnostic wrapper in `lib/launch.mjs`.
 
-**Stale manifest reconciliation:** Before any operation that checks manifest status, reconcile stale states. If status is non-terminal but the pane no longer exists or the copilot process has exited, transition the manifest to a terminal state and attempt best-effort summary extraction. This prevents orphaned `"running"` manifests from blocking future operations.
+**Stale manifest reconciliation:** Before any operation that checks manifest status, reconcile stale states. If status is non-terminal but the pane no longer exists or the copilot process has exited, transition the manifest to a terminal state and attempt best-effort summary extraction. **Also reconcile terminal manifests with live panes**: if status is terminal ("success", "failure", etc.) but the pane still exists with an active process, this indicates a crash between manifest update and pane close — close the pane now. This prevents orphaned `"running"` manifests from blocking future operations and stale panes from persisting.
 
 ## Timeout / Cancellation / Stalled Launch
 
@@ -757,9 +796,11 @@ Autonomous launches can fail to produce a sentinel. These are the terminal failu
 | Parent abort / cancellation | AbortSignal from SDK | `cancelled` | Closed (best-effort kill) | Preserved; resume is valid |
 | Output capture fails during poll | Read error from backend | Continue polling; if persistent, treat as pane-disappeared | — | — |
 
-**On tool timeout:** The child copilot process is **not killed** — it may still be doing useful work. The manifest records `timeout` status. The session remains valid for later resume. The pane stays alive so the user can observe or interact. This matches pi's behavior where abort doesn't destroy the session.
+**On tool timeout:** The child copilot process is **not killed** — it may still be doing useful work. The manifest records `timeout` status. The session remains valid for later resume. The pane stays alive so the user can observe or interact. **CRITICAL**: The timeout MUST cancel the background monitoring (sentinel polling, signal file watching, pane liveness checks). Thread an `AbortSignal` through the launch/wait logic. When `withToolTimeout()` fires: (1) signal abort to stop all polling loops, (2) update manifest to `timeout`, (3) return TOOL_TIMEOUT result. Without this, the background monitoring continues indefinitely after timeout, potentially closing the pane later when the sentinel fires — violating the "pane stays alive on timeout" contract.
 
 **On cancellation:** Best-effort pane close. If the pane can't be closed (already gone), that's fine. Manifest records `cancelled`. Session remains valid for resume.
+
+**Polling interval**: Sentinel polling and pane liveness checks should use a base interval (e.g., 500ms) with ±20% jitter to prevent thundering herd when multiple subagents are launched in parallel. `const delay = base * (0.8 + Math.random() * 0.4)`. This is an implementation advisory, not a behavioral requirement.
 
 **Interactive mode timeout:** Interactive launches have no sentinel and no tool-level timeout (they return immediately). The terminal events are: (a) user exiting copilot (Ctrl+D), (b) `subagent_done` tool writing signal file + model naturally concluding, or (c) copilot crashing. Status transitions from `"interactive"` to a terminal state happen during stale manifest reconciliation (see above) or when the signal file is detected. **Exit code for interactive sessions is always `null`** — there is no sentinel wrapper to capture it. Terminal status is determined by best-effort heuristic: if signal file exists OR `events.jsonl` contains at least one assistant message, status is `"success"`; otherwise `"failure"`.
 
@@ -858,7 +899,7 @@ describe("error handling", () => {
 - **Manifest v2**: New fields serialize/deserialize correctly (including `eventsBaseline`), `createManifestV2` factory produces valid records
 - **Resume flow**: New pane created, `--resume=<copilotSessionId>` launched, `SESSION_ACTIVE` on active session, `eventsBaseline` recorded
 - **Backend preference**: Zellij selected when both available
-- **Interactive mode**: `awaitCompletion` defaults false, no sentinel wrapper, status = "interactive"
+- **Interactive mode**: `awaitCompletion` defaults false, no sentinel wrapper, status = "interactive". If `interactive: true` AND `awaitCompletion: true` both specified, the call waits for the interactive session to end (via child exiting or `subagent_done`) — this is a valid combination for "launch interactive, then block until done." The only invalid combination is `interactive: true` with `closePaneOnCompletion: true` (pane must stay open for interactive use).
 - **closePaneOnCompletion: false**: Pane preserved after autonomous completion
 - **cmux passthrough**: Interactive/fork params ignored with warning
 - **Stale manifest reconciliation**: `running` with dead pane → terminal state
@@ -943,7 +984,7 @@ These scenarios span multiple services and validate their integration. Each row 
 | Stale manifest reconciliation | launch, resume | Launch completed but manifest stuck as "running" → resume detects dead pane → reconciles to terminal → resume succeeds |
 | Pane disappears mid-autonomous | launch, extractSessionSummary | Pane existence check fails during poll → manifest → "failure" → best-effort summary extraction |
 | Timeout → later resume | launch, resume, sessionLock | Tool timeout fires → manifest "timeout" → pane stays alive → later resume creates new pane |
-| `subagent_done` → clean exit | subagent_done, extractSessionSummary | Child calls tool → process.exit(0) → sentinel `__SUBAGENT_DONE_0__` → last assistant message = summary |
+| `subagent_done` → clean exit | subagent_done, extractSessionSummary | Child calls tool → signal file written → model may end conversation → sentinel detects copilot exit → last assistant message = summary |
 
 ## Golden Path Examples
 
