@@ -369,7 +369,8 @@ Request:
   "backend": "tmux",
   "awaitCompletion": true,
   "interactive": false,
-  "fork": { "copilotSessionId": "parent-uuid" }
+  "fork": { "copilotSessionId": "parent-uuid" },
+  "closePaneOnCompletion": true
 }
 ```
 

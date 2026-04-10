@@ -180,6 +180,12 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: 'return "success";',
     to: 'return "failure";',
   },
+  {
+    id: "mux-backend-preference",
+    file: ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+    from: 'export const SUPPORTED_BACKENDS = ["cmux", "zellij", "tmux"];',
+    to: 'export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [

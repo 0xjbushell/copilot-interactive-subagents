@@ -51,7 +51,8 @@ Call with an exact `agentIdentifier` and the task text you want the child to exe
   "backend": "tmux",
   "awaitCompletion": true,
   "interactive": false,
-  "fork": { "copilotSessionId": "parent-uuid" }
+  "fork": { "copilotSessionId": "parent-uuid" },
+  "closePaneOnCompletion": true
 }
 ```
 

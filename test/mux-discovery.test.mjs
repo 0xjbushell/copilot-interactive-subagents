@@ -35,13 +35,13 @@ describe("mux discovery and launch prerequisites", () => {
         startSupported: true,
       },
       {
-        backend: "tmux",
+        backend: "zellij",
         source: "attached",
         attachable: true,
         startSupported: true,
       },
       {
-        backend: "zellij",
+        backend: "tmux",
         source: "attached",
         attachable: true,
         startSupported: true,

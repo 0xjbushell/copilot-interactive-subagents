@@ -65,6 +65,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       awaitCompletion: "boolean (optional, default true)",
       interactive: "boolean (optional, default false — use -i flag, pane stays open)",
       fork: "{ launchId: string } | { copilotSessionId: string } (optional — fork parent session before launch)",
+      closePaneOnCompletion: "boolean (optional, default true for autonomous, false for interactive)",
     },
     resultShape: {
       launchId: "string",
@@ -82,7 +83,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     description: "Launch multiple exact-name agents in one shared backend.",
     requestShape: {
       launches:
-        "Array<{ agentIdentifier: string, task: string, backend?: cmux|tmux|zellij, awaitCompletion?: boolean }>",
+        "Array<{ agentIdentifier: string, task: string, backend?: cmux|tmux|zellij, awaitCompletion?: boolean, interactive?: boolean, fork?: { launchId | copilotSessionId }, closePaneOnCompletion?: boolean }>",
       backend: "cmux|tmux|zellij (optional shared backend override)",
       awaitCompletion: "boolean (optional shared default)",
     },
@@ -159,6 +160,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
           copilotSessionId: { type: "string", description: "Parent copilot session UUID to fork directly." },
         },
       },
+      closePaneOnCompletion: { type: "boolean", description: "Close pane after completion (default: true for autonomous, false for interactive)." },
     },
     required: ["agentIdentifier", "task"],
   },
@@ -178,6 +180,16 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
             task: { type: "string" },
             backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
             awaitCompletion: { type: "boolean" },
+            interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
+            fork: {
+              type: "object",
+              description: "Fork a parent session before launching.",
+              properties: {
+                launchId: { type: "string" },
+                copilotSessionId: { type: "string" },
+              },
+            },
+            closePaneOnCompletion: { type: "boolean", description: "Close pane after completion." },
           },
           required: ["agentIdentifier", "task"],
         },

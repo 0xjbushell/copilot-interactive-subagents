@@ -1,4 +1,4 @@
-export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
+export const SUPPORTED_BACKENDS = ["cmux", "zellij", "tmux"];
 
 import { spawnSync as defaultSpawnSync } from "node:child_process";
 
