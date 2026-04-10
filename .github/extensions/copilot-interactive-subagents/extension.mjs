@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { access, constants as fsConstants, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdirSync as defaultMkdirSync, writeFileSync as defaultWriteFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -808,7 +809,7 @@ function extractPaneId(stdout = "") {
   return paneId || null;
 }
 
-function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task, copilotSessionId, interactive, backend }) {
+export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task, copilotSessionId, interactive, backend }) {
   const createAgentLaunchCommand =
     request.createAgentLaunchCommand ?? runtimeServices.createAgentLaunchCommand;
   if (typeof createAgentLaunchCommand === "function") {
@@ -834,11 +835,27 @@ function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { a
     'process.exit(code);',
   ].join("");
 
-  return [
+  const envParts = [
     `COPILOT_SUBAGENT_AGENT_B64=${shellEscape(agentIdentifierB64)}`,
     `COPILOT_SUBAGENT_TASK_B64=${shellEscape(taskB64)}`,
-    `node -e ${shellEscape(runnerScript)}`,
-  ].join(" ");
+  ];
+  if (copilotSessionId) {
+    envParts.push(`COPILOT_SUBAGENT_SESSION_ID=${shellEscape(copilotSessionId)}`);
+  }
+  if (request.launchId) {
+    envParts.push(`COPILOT_SUBAGENT_LAUNCH_ID=${shellEscape(request.launchId)}`);
+  }
+  return [...envParts, `node -e ${shellEscape(runnerScript)}`].join(" ");
+}
+
+export function writeSignalFile({ copilotSessionId, launchId, stateDir, services = {} } = {}) {
+  const mkdirSync = services.mkdirSync ?? defaultMkdirSync;
+  const writeFileSync = services.writeFileSync ?? defaultWriteFileSync;
+  const now = services.now ?? Date.now;
+  const baseDir = stateDir ?? ".copilot-interactive-subagents";
+  const signalDir = path.join(baseDir, "done");
+  mkdirSync(signalDir, { recursive: true });
+  writeFileSync(path.join(signalDir, copilotSessionId), `${now()}|${launchId ?? "unknown"}`);
 }
 
 async function defaultOpenPane({ backend, request, runtimeServices = {}, ...context }) {
@@ -1358,9 +1375,25 @@ export async function registerExtensionSession(options = {}) {
     },
   });
 
-  session = await joinSession({
-    tools: buildSdkTools(handlers),
-  });
+  const tools = buildSdkTools(handlers);
+
+  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {
+    tools.push({
+      name: "subagent_done",
+      description:
+        "Call when you have completed your task. Put your final summary in your last message BEFORE calling this tool. Your session will end after this call.",
+      parameters: {},
+      handler: () => {
+        writeSignalFile({
+          copilotSessionId: process.env.COPILOT_SUBAGENT_SESSION_ID,
+          launchId: process.env.COPILOT_SUBAGENT_LAUNCH_ID,
+        });
+        return { ok: true, message: "Task marked complete. Session ending." };
+      },
+    });
+  }
+
+  session = await joinSession({ tools });
 
   return session;
 }
