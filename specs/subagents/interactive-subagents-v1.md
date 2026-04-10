@@ -8,6 +8,18 @@ Persistent, interactive, and resumable subagent sessions for Copilot CLI in tmux
 
 This spec adds 6 capabilities to the existing extension: **ephemeral panes** (auto-close after completion), **persistent sessions** (tracked by UUID), **interactive mode** (user collaborates in pane), **resume** (continue a completed session), **fork** (copy a session's context into a new child), and **explicit completion** (`subagent_done` tool).
 
+### How to Use This Spec
+
+**Don't read the whole spec.** Use your ticket's Quick Start to find the sections you need:
+- **Lines 30-44**: Wave table — which services exist, their files, and dependencies
+- **Lines 47-63**: Touchpoint map — which files each feature touches
+- **Lines 155-177**: Cross-cutting invariants — rules that apply to ALL code paths
+- **Lines 275-322**: DI pattern — copy this for any new service
+- **Lines 326-670**: Service-by-service contracts (find yours by wave number)
+- **Lines 785-945**: Testing strategy, E2E harness, scenario matrix
+
+Your ticket tells you exactly which lines to read. Start there, not here.
+
 ### What to Build (Implementation Waves)
 
 **Wave 0 (prerequisite):** Create test directory structure before writing any new test files:
@@ -390,15 +402,13 @@ Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
 Per-`copilotSessionId` lockfile preventing concurrent access (TOCTOU races).
 
 ```javascript
-// acquireLock(copilotSessionId) → { release: () => void }
+// acquireLock({ copilotSessionId, services? }) → { release: () => void }
 //   - Creates .copilot-interactive-subagents/locks/<copilotSessionId>.lock
 //   - Uses O_CREAT | O_EXCL for atomic creation
 //   - Throws SESSION_ACTIVE if lock already held
-//   - Registers cleanup handler for process exit
-
-// releaseLock(copilotSessionId) → void
-//   - Removes the lockfile
-//   - Idempotent (no error if already released)
+//   - Registers process.on("exit") cleanup as safety net
+//   - release() removes lockfile — idempotent (no error if already released)
+//   - There is NO separate releaseLock export — caller uses the returned release function
 ```
 
 **Rationale**: Without locking, two concurrent resume calls could both pass the "is session active?" check and create two panes for the same session, corrupting events.jsonl.

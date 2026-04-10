@@ -98,3 +98,22 @@ When creating a new `.mjs` file under `lib/`:
 ## Specifications
 
 The implementation source of truth is `specs/subagents/interactive-subagents-v1.md`. Read the **Start Here** section first — it tells you what to build, in what order, and how to verify.
+
+## Working with Tickets
+
+Implementation is tracked via `tix` tickets in `.tix/tasks.jsonl`. Each deliverable ticket is a vertical slice with acceptance criteria, spec references, and implementation notes.
+
+**Reading a ticket:**
+```bash
+tix show TIX-XXXXXX --full     # Full ticket with all context
+tix list --all --tag interactive-subagents-v1   # All v1 tickets
+```
+
+**Ticket structure** (read top-down — the most important info is first):
+1. **Quick Start** — what to read, what files to edit, what blocks you
+2. **Acceptance Criteria** — GIVEN/WHEN/THEN (frozen — never modify to match implementation)
+3. **Implementation Notes** — how to build it, DI patterns, domain-specific guidance
+4. **Adversarial Test Cases** — edge cases that must be tested
+5. **Verification Checklist** — exact commands to prove you're done
+6. **CRAP / Quality Gates** — mutation targets and CRAP registration
+7. **Traceability** — spec line references (metadata)
