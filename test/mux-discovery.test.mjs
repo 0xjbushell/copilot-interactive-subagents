@@ -437,3 +437,40 @@ describe("mux discovery and launch prerequisites", () => {
     assert.deepEqual(result.supportedBackends, []);
   });
 });
+
+describe("probeSessionLiveness", () => {
+  it("GIVEN tmux backend WHEN has-session succeeds THEN returns true", async () => {
+    const { probeSessionLiveness } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      ["probeSessionLiveness"],
+    );
+    const result = probeSessionLiveness({
+      backend: "tmux",
+      paneId: "%5",
+      services: { spawnSync: () => ({ status: 0 }) },
+    });
+    assert.equal(result, true);
+  });
+
+  it("GIVEN tmux backend WHEN has-session fails THEN returns false", async () => {
+    const { probeSessionLiveness } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      ["probeSessionLiveness"],
+    );
+    const result = probeSessionLiveness({
+      backend: "tmux",
+      paneId: "%5",
+      services: { spawnSync: () => ({ status: 1 }) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN unknown backend WHEN probed THEN returns false", async () => {
+    const { probeSessionLiveness } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      ["probeSessionLiveness"],
+    );
+    const result = probeSessionLiveness({ backend: "unknown", paneId: "%1" });
+    assert.equal(result, false);
+  });
+});

@@ -1,5 +1,7 @@
 export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
 
+import { spawnSync as defaultSpawnSync } from "node:child_process";
+
 function isAttached(backend, env = {}) {
   switch (backend) {
     case "cmux":
@@ -267,4 +269,20 @@ export async function resolveLaunchBackend({
     attach,
     start,
   });
+}
+
+export function probeSessionLiveness({ backend, paneId, services = {} } = {}) {
+  const spawnSync = services.spawnSync ?? defaultSpawnSync;
+  if (backend === "tmux") {
+    const result = spawnSync("tmux", ["has-session", "-t", paneId], { stdio: "pipe" });
+    return result.status === 0;
+  }
+  if (backend === "zellij") {
+    const result = spawnSync("zellij", ["action", "dump-screen", "/dev/null"], {
+      stdio: "pipe",
+      env: { ...process.env, ZELLIJ_PANE_ID: paneId },
+    });
+    return result.status === 0;
+  }
+  return false;
 }

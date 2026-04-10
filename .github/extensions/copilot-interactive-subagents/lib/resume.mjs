@@ -6,7 +6,13 @@ import {
   isSupportedBackend,
 } from "./state.mjs";
 import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
-import { extractLaunchSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
+import { probeSessionLiveness as defaultProbeSessionLiveness } from "./mux.mjs";
+import { closePane as defaultClosePane } from "./close-pane.mjs";
+import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir as defaultHomedir } from "node:os";
 
 function resolveOperation({ request, services = {}, name }) {
   return request[name] ?? services[name];
@@ -57,15 +63,6 @@ function resolveStateIndex({ request = {}, services = {} }) {
   return createStateIndex({
     projectRoot: request.projectRoot,
   });
-}
-
-function normalizeFailureMessage(message, fallback) {
-  if (typeof message !== "string") {
-    return fallback;
-  }
-
-  const trimmed = message.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 function shapeResumeFailure({
@@ -168,7 +165,7 @@ function shapeResumeResult({ manifest, request, paneVisible, summarySource }) {
     }).summary;
 
   return {
-    ok: manifest.status === "running" || manifest.status === "success",
+    ok: manifest.status === "running" || manifest.status === "success" || manifest.status === "interactive",
     launchId: manifest.launchId,
     status: manifest.status,
     agentIdentifier: manifest.agentIdentifier,
@@ -181,6 +178,7 @@ function shapeResumeResult({ manifest, request, paneVisible, summarySource }) {
     summarySource,
     exitCode: manifest.exitCode,
     metadataVersion: manifest.metadataVersion,
+    copilotSessionId: manifest.copilotSessionId ?? null,
     resumePointer: buildResumePointer(manifest, {
       workspacePath: request.workspacePath,
       projectRoot: request.projectRoot,
@@ -188,126 +186,184 @@ function shapeResumeResult({ manifest, request, paneVisible, summarySource }) {
   };
 }
 
-async function probeManifestTarget({ plan, request, services }) {
-  const probeResumeTarget = resolveOperation({ request, services, name: "probeResumeTarget" });
-  if (typeof probeResumeTarget !== "function") {
-    return null;
-  }
-
-  const probe = await probeResumeTarget({
-    manifest: plan.manifest,
-    request,
-  });
-
-  if (probe?.ok !== false) {
-    return null;
-  }
-
-  return shapeResumeFailure({
-    code: probe.code ?? "RESUME_TARGET_INVALID",
-    message: normalizeFailureMessage(
-      probe.message ?? probe.reason,
-      `The stored session ${plan.manifest.sessionId} is no longer resumable.`,
-    ),
-    manifest: plan.manifest,
-    request,
-  });
+function cleanupStaleSignalFile({ copilotSessionId, stateDir, services = {} }) {
+  const unlinkSync = services.unlinkSync ?? defaultUnlinkSync;
+  const baseDir = stateDir ?? ".copilot-interactive-subagents";
+  try { unlinkSync(join(baseDir, "done", copilotSessionId)); } catch { /* not present */ }
 }
 
-function formatAttachFailureMessage(error) {
-  const message = normalizeFailureMessage(
-    error instanceof Error ? error.message : String(error),
-    "Resume attach failed.",
-  );
-
-  return message.includes("attach failed")
-    ? message
-    : `Resume attach failed: ${message}`;
-}
-
-function shapeRuntimeResumeFailure({ error, manifest, request }) {
-  return shapeResumeFailure({
-    code: error?.code ?? "RESUME_RUNTIME_UNAVAILABLE",
-    message: normalizeFailureMessage(
-      error instanceof Error ? error.message : String(error),
-      "Resume failed while monitoring or persisting the launch state.",
-    ),
-    manifest,
-    request,
-  });
-}
-
-async function attachResumeTarget({ plan, request, services }) {
-  const reattachResumeTarget = resolveOperation({ request, services, name: "reattachResumeTarget" });
-
-  if (typeof reattachResumeTarget !== "function") {
-    return {
-      paneId: plan.manifest.paneId,
-      paneVisible: true,
-      sessionId: plan.manifest.sessionId,
-    };
-  }
-
+function countSessionEvents({ copilotSessionId, copilotHome, services = {} }) {
+  const readFile = services.readFileSync ?? defaultReadFileSync;
+  const homedir = services.homedir ?? defaultHomedir;
+  const home = copilotHome ?? join(homedir(), ".copilot");
+  const eventsPath = join(home, "session-state", copilotSessionId, "events.jsonl");
   try {
-    return await reattachResumeTarget({
-      manifest: plan.manifest,
-      request,
-    });
-  } catch (error) {
-    return shapeResumeFailure({
-      code: "RESUME_ATTACH_FAILED",
-      message: formatAttachFailureMessage(error),
-      manifest: plan.manifest,
-      request,
-    });
+    const raw = readFile(eventsPath, "utf8");
+    return raw.split("\n").filter((l) => l.trim().length > 0).length;
+  } catch {
+    return 0;
   }
 }
 
-async function buildTerminalManifest({
-  plan,
-  request,
-  services,
-  paneId,
-  sessionId,
+async function awaitResumeCompletion({
+  manifest, request, services, newPaneId, eventsBaseline, plan,
 }) {
-  if (!request.awaitCompletion) {
-    return {
-      manifest: {
-        ...plan.manifest,
-        paneId,
-        sessionId,
-        status: plan.manifest.status === "pending" ? "running" : plan.manifest.status,
-        summary: plan.manifest.summary,
-        exitCode: plan.manifest.exitCode,
-      },
-      summarySource: plan.manifest.summary ? "stored" : "fallback",
-    };
-  }
-
+  const readPaneOutput = resolveOperation({ request, services, name: "readPaneOutput" });
+  const readChildSessionState = resolveOperation({ request, services, name: "readChildSessionState" });
   const completion = await waitForLaunchCompletion({
-    backend: plan.manifest.backend,
-    paneId,
-    sessionId,
-    agentIdentifier: plan.manifest.agentIdentifier,
+    backend: manifest.backend,
+    paneId: newPaneId,
+    sessionId: manifest.sessionId,
+    agentIdentifier: manifest.agentIdentifier,
     request,
-    readPaneOutput: resolveOperation({ request, services, name: "readPaneOutput" }),
-    readChildSessionState: resolveOperation({ request, services, name: "readChildSessionState" }),
+    readPaneOutput,
+    readChildSessionState,
     maxAttempts: request.maxMonitorAttempts ?? 25,
     pollIntervalMs: request.pollIntervalMs ?? 500,
     sleep: request.sleep,
   });
 
-  return {
-    manifest: {
-      ...plan.manifest,
-      paneId,
-      sessionId,
-      status: completion.status,
-      summary: completion.summary,
-      exitCode: completion.exitCode,
-    },
-    summarySource: completion.summarySource,
-  };
+  let completionSummary = completion.summary;
+  let completionSummarySource = completion.summarySource;
+  const sessionSummary = extractSessionSummary({
+    copilotSessionId: manifest.copilotSessionId,
+    sinceEventIndex: eventsBaseline,
+  });
+  if (sessionSummary.summary) {
+    completionSummary = sessionSummary.summary;
+    completionSummarySource = sessionSummary.source;
+  }
+
+  const terminalManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, {
+    status: completion.status,
+    summary: completionSummary,
+    exitCode: completion.exitCode,
+  });
+
+  const closePane = services.closePane ?? defaultClosePane;
+  if (manifest.closePaneOnCompletion !== false) {
+    try { closePane({ backend: manifest.backend, paneId: newPaneId }); } catch { /* best effort */ }
+  }
+
+  return shapeResumeResult({
+    manifest: terminalManifest,
+    request,
+    paneVisible: false,
+    summarySource: completionSummarySource,
+  });
+}
+
+async function openResumePane({ manifest, request, services }) {
+  const openPaneAndSendCommand = services.openPaneAndSendCommand ?? request.openPaneAndSendCommand;
+  if (typeof openPaneAndSendCommand === "function") {
+    const result = await openPaneAndSendCommand({
+      backend: manifest.backend,
+      copilotSessionId: manifest.copilotSessionId,
+      task: request.task,
+      request,
+    });
+    return result?.paneId ?? manifest.paneId;
+  }
+  return manifest.paneId;
+}
+
+export async function resumeSubagent({ request = {}, services = {} } = {}) {
+  const plan = await planResumeSession({ request, services });
+  if (!plan.ok) {
+    return plan;
+  }
+
+  const manifest = plan.manifest;
+  if (!manifest.copilotSessionId) {
+    return shapeResumeFailure({
+      code: "RESUME_UNSUPPORTED",
+      message: "This launch does not have a copilotSessionId (pre-v2 launch). Cannot resume.",
+      manifest,
+      request,
+    });
+  }
+
+  // Step 1: Acquire lock
+  const acquireLock = services.acquireLock ?? defaultAcquireLock;
+  let lock;
+  try {
+    lock = acquireLock({ copilotSessionId: manifest.copilotSessionId, stateDir: request.stateDir });
+  } catch (err) {
+    if (err?.code === "SESSION_ACTIVE") {
+      return shapeResumeFailure({ code: "SESSION_ACTIVE", message: err.message, manifest, request });
+    }
+    throw err;
+  }
+
+  try {
+    // Step 2: Verify pane is dead
+    const probeSessionLiveness = services.probeSessionLiveness ?? defaultProbeSessionLiveness;
+    if (probeSessionLiveness({ backend: manifest.backend, paneId: manifest.paneId, services })) {
+      lock.release();
+      return shapeResumeFailure({
+        code: "SESSION_ACTIVE",
+        message: "Session pane is still alive. Close or wait for completion before resuming.",
+        manifest,
+        request,
+      });
+    }
+
+    // Step 3: Record eventsBaseline BEFORE launching child
+    const eventsBaseline = countSessionEvents({
+      copilotSessionId: manifest.copilotSessionId,
+      copilotHome: request.copilotHome,
+      services,
+    });
+
+    // Step 4: Clean up stale signal file
+    cleanupStaleSignalFile({ copilotSessionId: manifest.copilotSessionId, stateDir: request.stateDir, services });
+
+    // Step 5: Open new pane + send resume command
+    const newPaneId = await openResumePane({ manifest, request, services });
+
+    // Step 6: Update manifest
+    const updatedManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, {
+      status: "interactive",
+      paneId: newPaneId,
+      eventsBaseline,
+    });
+
+    if (plan.stateIndex) {
+      try {
+        await plan.stateIndex.writeLaunchIndexEntry({
+          ...updatedManifest,
+          manifestPath: buildResumePointer(updatedManifest, {
+            workspacePath: request.workspacePath,
+            projectRoot: request.projectRoot,
+          }).manifestPath,
+        });
+      } catch { /* best effort */ }
+    }
+
+    // Step 7: Release lock (pane is now running)
+    lock.release();
+
+    // Step 8: If awaitCompletion, monitor
+    if (request.awaitCompletion) {
+      return awaitResumeCompletion({ manifest, request, services, newPaneId, eventsBaseline, plan });
+    }
+
+    // Fire-and-forget: return immediately
+    return shapeResumeResult({
+      manifest: updatedManifest,
+      request,
+      paneVisible: true,
+      summarySource: "fallback",
+    });
+  } catch (error) {
+    lock.release();
+    return shapeResumeFailure({
+      code: error?.code ?? "RESUME_RUNTIME_UNAVAILABLE",
+      message: error instanceof Error ? error.message : String(error),
+      manifest,
+      request,
+    });
+  }
 }
 
 export async function planResumeSession({ request = {}, services = {} } = {}) {
@@ -372,59 +428,4 @@ export async function planResumeSession({ request = {}, services = {} } = {}) {
     launchId,
     request,
   });
-}
-
-export async function resumeSubagent({ request = {}, services = {} } = {}) {
-  const plan = await planResumeSession({ request, services });
-  if (!plan.ok) {
-    return plan;
-  }
-
-  const probeFailure = await probeManifestTarget({ plan, request, services });
-  if (probeFailure) {
-    return probeFailure;
-  }
-
-  const attachment = await attachResumeTarget({ plan, request, services });
-  if (attachment?.ok === false) {
-    return attachment;
-  }
-
-  const nextPaneId = attachment?.paneId ?? plan.manifest.paneId;
-  const nextSessionId = attachment?.sessionId ?? plan.manifest.sessionId;
-  const paneVisible = attachment?.paneVisible !== false;
-  try {
-    const { manifest: terminalUpdate, summarySource } = await buildTerminalManifest({
-      plan,
-      request,
-      services,
-      paneId: nextPaneId,
-      sessionId: nextSessionId,
-    });
-
-    const persistedManifest = await plan.stateStore.writeLaunchRecord(terminalUpdate);
-    if (plan.stateIndex) {
-      try {
-        await plan.stateIndex.writeLaunchIndexEntry({
-          ...persistedManifest,
-          manifestPath: buildResumePointer(persistedManifest, {
-            workspacePath: request.workspacePath,
-            projectRoot: request.projectRoot,
-          }).manifestPath,
-        });
-      } catch {}
-    }
-    return shapeResumeResult({
-      manifest: persistedManifest,
-      request,
-      paneVisible,
-      summarySource,
-    });
-  } catch (error) {
-    return shapeRuntimeResumeFailure({
-      error,
-      manifest: plan.manifest,
-      request,
-    });
-  }
 }

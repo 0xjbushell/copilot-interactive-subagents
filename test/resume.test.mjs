@@ -172,7 +172,7 @@ describe("resume pane-backed launches from stored metadata", () => {
     assert.match(plan.message, /metadata/i);
   });
 
-  it("GIVEN prior stored metadata and a valid child session WHEN resume runs THEN it restores the pane-backed interaction and returns updated metadata", async (t) => {
+  it("GIVEN prior stored metadata with copilotSessionId WHEN resume runs THEN it creates new pane and returns interactive status", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-success-");
     const { resumeSubagent } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
@@ -192,8 +192,9 @@ describe("resume pane-backed launches from stored metadata", () => {
         backend: "tmux",
         paneId: "%9",
         sessionId: "session-running",
+        copilotSessionId: "csid-abc-123",
         requestedAt: "2026-03-19T00:00:00.000Z",
-        status: "running",
+        status: "success",
       },
     });
 
@@ -201,68 +202,27 @@ describe("resume pane-backed launches from stored metadata", () => {
       request: {
         launchId: "launch-success",
         workspacePath,
-        awaitCompletion: true,
       },
       services: {
         stateStore,
-        probeResumeTarget: async ({ manifest }) => {
-          assert.equal(manifest.launchId, "launch-success");
-          return { ok: true };
-        },
-        reattachResumeTarget: async ({ manifest }) => {
-          assert.equal(manifest.paneId, "%9");
-          return {
-            paneId: "%9",
-            paneVisible: true,
-            sessionId: "session-running",
-          };
-        },
-        readPaneOutput: async ({ paneId, sessionId }) => {
-          assert.equal(paneId, "%9");
-          assert.equal(sessionId, "session-running");
-          return {
-            output: "assistant: Resumed the running reviewer session\n__SUBAGENT_DONE_0__",
-          };
-        },
+        acquireLock: () => ({ release: () => {} }),
+        probeSessionLiveness: () => false,
+        openPaneAndSendCommand: async () => ({ paneId: "%20" }),
+        readFileSync: () => { throw new Error("ENOENT"); },
       },
     });
 
     const stored = await createStateStore({ workspacePath }).readLaunchRecord("launch-success");
 
-    assert.deepEqual(result, {
-      ok: true,
-      launchId: "launch-success",
-      status: "success",
-      agentIdentifier: "reviewer",
-      agentKind: "custom",
-      backend: "tmux",
-      paneId: "%9",
-      paneVisible: true,
-      sessionId: "session-running",
-      summary: "Resumed the running reviewer session",
-      summarySource: "assistant-message",
-      exitCode: 0,
-      metadataVersion: 2,
-      resumePointer: {
-        launchId: "launch-success",
-        sessionId: "session-running",
-        agentIdentifier: "reviewer",
-        backend: "tmux",
-        paneId: "%9",
-        manifestPath: path.join(
-          workspacePath,
-          ".copilot-interactive-subagents",
-          "launches",
-          "launch-success.json",
-        ),
-      },
-    });
-    assert.equal(stored.status, "success");
-    assert.equal(stored.summary, "Resumed the running reviewer session");
-    assert.equal(stored.exitCode, 0);
+    assert.equal(result.ok, true);
+    assert.equal(result.status, "interactive");
+    assert.equal(result.paneId, "%20");
+    assert.equal(result.copilotSessionId, "csid-abc-123");
+    assert.equal(stored.status, "interactive");
+    assert.equal(stored.paneId, "%20");
   });
 
-  it("GIVEN stored tmux metadata without a child session id WHEN resume runs THEN it can still reattach and monitor by pane", async (t) => {
+  it("GIVEN stored tmux metadata without copilotSessionId WHEN resume runs THEN it returns RESUME_UNSUPPORTED", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-sessionless-");
     const { resumeSubagent } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
@@ -287,32 +247,14 @@ describe("resume pane-backed launches from stored metadata", () => {
       request: {
         launchId: "launch-sessionless",
         workspacePath,
-        awaitCompletion: true,
-      },
-      services: {
-        probeResumeTarget: async () => ({ ok: true }),
-        reattachResumeTarget: async () => ({
-          paneId: "%13",
-          paneVisible: true,
-          sessionId: null,
-        }),
-        readPaneOutput: async ({ paneId, sessionId }) => {
-          assert.equal(paneId, "%13");
-          assert.equal(sessionId, null);
-          return {
-            output: "assistant: Sessionless tmux resume still completed\n__SUBAGENT_DONE_0__",
-          };
-        },
       },
     });
 
-    assert.equal(result.ok, true);
-    assert.equal(result.status, "success");
-    assert.equal(result.sessionId, null);
-    assert.equal(result.summary, "Sessionless tmux resume still completed");
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "RESUME_UNSUPPORTED");
   });
 
-  it("GIVEN the parent session changes and only workspace metadata remains WHEN resume runs THEN it still succeeds without a project-local index", async (t) => {
+  it("GIVEN workspace metadata remains WHEN resume runs fire-and-forget THEN it returns immediately with interactive status", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-cross-session-");
     const { resumeSubagent } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
@@ -323,6 +265,7 @@ describe("resume pane-backed launches from stored metadata", () => {
       ["createStateStore"],
     );
 
+    const laterStateStore = createStateStore({ workspacePath });
     await writeLaunchRecord({
       workspacePath,
       record: {
@@ -332,12 +275,12 @@ describe("resume pane-backed launches from stored metadata", () => {
         backend: "tmux",
         paneId: "%10",
         sessionId: "session-cross-session",
+        copilotSessionId: "csid-cross",
         requestedAt: "2026-03-19T00:00:00.000Z",
-        status: "running",
+        status: "success",
       },
     });
 
-    const laterStateStore = createStateStore({ workspacePath });
     const result = await resumeSubagent({
       request: {
         launchId: "launch-cross-session",
@@ -346,25 +289,21 @@ describe("resume pane-backed launches from stored metadata", () => {
       },
       services: {
         stateStore: laterStateStore,
-        probeResumeTarget: async () => ({ ok: true }),
-        reattachResumeTarget: async () => ({
-          paneId: "%10",
-          paneVisible: true,
-          sessionId: "session-cross-session",
-        }),
+        acquireLock: () => ({ release: () => {} }),
+        probeSessionLiveness: () => false,
+        openPaneAndSendCommand: async () => ({ paneId: "%10" }),
+        readFileSync: () => { throw new Error("ENOENT"); },
       },
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.status, "running");
+    assert.equal(result.status, "interactive");
     assert.equal(result.paneId, "%10");
-    assert.equal(result.sessionId, "session-cross-session");
     assert.equal(result.summarySource, "fallback");
-    assert.match(result.summary, /running/i);
   });
 
-  it("GIVEN stale stored metadata WHEN resume is attempted THEN it returns RESUME_TARGET_INVALID instead of a success-shaped result", async (t) => {
-    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-invalid-");
+  it("GIVEN session is still active (lock held) WHEN resume is attempted THEN it returns SESSION_ACTIVE", async (t) => {
+    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-active-");
     const { resumeSubagent } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
       ["resumeSubagent"],
@@ -373,12 +312,13 @@ describe("resume pane-backed launches from stored metadata", () => {
     await writeLaunchRecord({
       workspacePath,
       record: {
-        launchId: "launch-invalid",
+        launchId: "launch-active",
         agentIdentifier: "reviewer",
         agentKind: "custom",
         backend: "tmux",
         paneId: "%11",
-        sessionId: "session-stale",
+        sessionId: "session-active",
+        copilotSessionId: "csid-active",
         requestedAt: "2026-03-19T00:00:00.000Z",
         status: "running",
       },
@@ -386,22 +326,22 @@ describe("resume pane-backed launches from stored metadata", () => {
 
     const result = await resumeSubagent({
       request: {
-        launchId: "launch-invalid",
+        launchId: "launch-active",
         workspacePath,
       },
       services: {
-        probeResumeTarget: async () => ({
-          ok: false,
-          reason: "session session-stale is no longer available",
-        }),
+        acquireLock: () => {
+          const err = new Error("Session is currently active");
+          err.code = "SESSION_ACTIVE";
+          throw err;
+        },
       },
     });
 
     assert.equal(result.ok, false);
-    assert.equal(result.code, "RESUME_TARGET_INVALID");
+    assert.equal(result.code, "SESSION_ACTIVE");
     assert.equal(result.status, "failure");
-    assert.equal(result.launchId, "launch-invalid");
-    assert.match(result.message, /session-stale/);
+    assert.equal(result.launchId, "launch-active");
   });
 
   it("GIVEN stored metadata uses an unsupported backend WHEN resume is attempted THEN it is rejected before any runtime command runs", async (t) => {
@@ -430,11 +370,6 @@ describe("resume pane-backed launches from stored metadata", () => {
         launchId: "launch-bad-backend",
         workspacePath,
       },
-      services: {
-        probeResumeTarget: async () => {
-          assert.fail("unsupported resume metadata should fail before probe");
-        },
-      },
     });
 
     assert.equal(result.ok, false);
@@ -442,26 +377,56 @@ describe("resume pane-backed launches from stored metadata", () => {
     assert.match(result.message, /unsupported backend/i);
   });
 
-  it("GIVEN pane reattach fails WHEN resume is attempted THEN it returns RESUME_ATTACH_FAILED and preserves stored metadata for debugging", async (t) => {
-    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-attach-failure-");
+  it("GIVEN stored metadata missing required fields WHEN resume is attempted THEN it returns RESUME_TARGET_INVALID", async (t) => {
+    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-missing-fields-");
     const { resumeSubagent } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
       ["resumeSubagent"],
-    );
-    const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
-      ["createStateStore"],
     );
 
     await writeLaunchRecord({
       workspacePath,
       record: {
-        launchId: "launch-attach-failure",
+        launchId: "launch-missing-fields",
+        agentIdentifier: null,
+        agentKind: "custom",
+        backend: "tmux",
+        paneId: "%14",
+        sessionId: "session-incomplete",
+        requestedAt: "2026-03-19T00:00:00.000Z",
+        status: "running",
+      },
+    });
+
+    const result = await resumeSubagent({
+      request: {
+        launchId: "launch-missing-fields",
+        workspacePath,
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "RESUME_TARGET_INVALID");
+    assert.match(result.message, /missing/i);
+  });
+
+  it("GIVEN pane still alive WHEN resume is attempted THEN it returns SESSION_ACTIVE", async (t) => {
+    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-alive-pane-");
+    const { resumeSubagent } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      ["resumeSubagent"],
+    );
+
+    await writeLaunchRecord({
+      workspacePath,
+      record: {
+        launchId: "launch-alive-pane",
         agentIdentifier: "reviewer",
         agentKind: "custom",
         backend: "tmux",
         paneId: "%12",
         sessionId: "session-debug",
+        copilotSessionId: "csid-alive",
         requestedAt: "2026-03-19T00:00:00.000Z",
         status: "running",
         summary: "Stored summary should stay untouched",
@@ -470,29 +435,21 @@ describe("resume pane-backed launches from stored metadata", () => {
 
     const result = await resumeSubagent({
       request: {
-        launchId: "launch-attach-failure",
+        launchId: "launch-alive-pane",
         workspacePath,
       },
       services: {
-        probeResumeTarget: async () => ({ ok: true }),
-        reattachResumeTarget: async () => {
-          throw new Error("tmux attach failed");
-        },
+        acquireLock: () => ({ release: () => {} }),
+        probeSessionLiveness: () => true,
       },
     });
 
-    const stored = await createStateStore({ workspacePath }).readLaunchRecord("launch-attach-failure");
-
     assert.equal(result.ok, false);
-    assert.equal(result.code, "RESUME_ATTACH_FAILED");
+    assert.equal(result.code, "SESSION_ACTIVE");
     assert.equal(result.status, "failure");
-    assert.match(result.message, /attach failed/i);
-    assert.equal(stored.status, "running");
-    assert.equal(stored.summary, "Stored summary should stay untouched");
-    assert.equal(stored.sessionId, "session-debug");
   });
 
-  it("GIVEN pane monitoring throws during resume WHEN resume runs THEN it returns a structured failure instead of throwing", async (t) => {
+  it("GIVEN open pane fails during resume WHEN resume runs THEN it returns a structured failure instead of throwing", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-runtime-failure-");
     const { resumeSubagent } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
@@ -508,8 +465,9 @@ describe("resume pane-backed launches from stored metadata", () => {
         backend: "tmux",
         paneId: "%15",
         sessionId: "session-runtime",
+        copilotSessionId: "csid-runtime",
         requestedAt: "2026-03-19T00:00:00.000Z",
-        status: "running",
+        status: "success",
       },
     });
 
@@ -517,17 +475,13 @@ describe("resume pane-backed launches from stored metadata", () => {
       request: {
         launchId: "launch-runtime-failure",
         workspacePath,
-        awaitCompletion: true,
       },
       services: {
-        probeResumeTarget: async () => ({ ok: true }),
-        reattachResumeTarget: async () => ({
-          paneId: "%15",
-          paneVisible: true,
-          sessionId: "session-runtime",
-        }),
-        readPaneOutput: async () => {
-          throw new Error("pane output monitoring exploded");
+        acquireLock: () => ({ release: () => {} }),
+        probeSessionLiveness: () => false,
+        readFileSync: () => { throw new Error("ENOENT"); },
+        openPaneAndSendCommand: async () => {
+          throw new Error("pane creation exploded");
         },
       },
     });
@@ -535,6 +489,6 @@ describe("resume pane-backed launches from stored metadata", () => {
     assert.equal(result.ok, false);
     assert.equal(result.code, "RESUME_RUNTIME_UNAVAILABLE");
     assert.equal(result.launchId, "launch-runtime-failure");
-    assert.match(result.message, /monitoring exploded/i);
+    assert.match(result.message, /exploded/i);
   });
 });
