@@ -115,7 +115,7 @@ function shapeLaunchResult({
     }).summary;
 
   return {
-    ok: manifest.status === "success" || manifest.status === "running",
+    ok: manifest.status === "success" || manifest.status === "running" || manifest.status === "interactive",
     launchId: manifest.launchId,
     status: manifest.status,
     agentIdentifier: manifest.agentIdentifier,
@@ -245,19 +245,20 @@ async function runChildLaunch({
     request,
   });
 
-  const runningManifest = await stateStore.updateLaunchRecord(plan.launchId, {
-    status: "running",
+  const activeStatus = plan.interactive ? "interactive" : "running";
+  const activeManifest = await stateStore.updateLaunchRecord(plan.launchId, {
+    status: activeStatus,
     sessionId: childLaunch?.sessionId ?? pendingManifest.sessionId,
   });
   await updateLaunchIndexBestEffort({
     stateIndex,
-    manifest: runningManifest,
+    manifest: activeManifest,
     request,
   });
 
   if (!plan.awaitCompletion) {
     return shapeLaunchResult({
-      manifest: runningManifest,
+      manifest: activeManifest,
       request,
       launchAction: plan.launchAction,
       paneVisible,
@@ -267,8 +268,8 @@ async function runChildLaunch({
 
   const completion = await waitForLaunchCompletion({
     backend: plan.backend,
-    paneId: runningManifest.paneId,
-    sessionId: runningManifest.sessionId,
+    paneId: activeManifest.paneId,
+    sessionId: activeManifest.sessionId,
     agentIdentifier: plan.agentIdentifier,
     readPaneOutput,
     readChildSessionState,
@@ -369,7 +370,7 @@ export function planSingleLaunch({
     launchAction: backendResolution.action,
     backendSessionName: backendResolution.sessionName ?? null,
     task: request.task,
-    awaitCompletion: request.awaitCompletion !== false,
+    awaitCompletion: request.awaitCompletion ?? (interactive ? false : true),
     requestedAt: now(),
     sessionId: null,
     summary: null,

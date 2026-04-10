@@ -62,6 +62,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       task: "string",
       backend: "cmux|tmux|zellij (optional)",
       awaitCompletion: "boolean (optional, default true)",
+      interactive: "boolean (optional, default false — use -i flag, pane stays open)",
     },
     resultShape: {
       launchId: "string",
@@ -147,6 +148,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
       task: { type: "string", description: "Task text for the child agent." },
       backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
       awaitCompletion: { type: "boolean" },
+      interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
     },
     required: ["agentIdentifier", "task"],
   },
@@ -818,13 +820,14 @@ function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { a
   const taskB64 = encodeBase64(task ?? "");
   const useDefaultCopilotAgent = agentIdentifier === "github-copilot";
   const promptFlag = interactive ? "-i" : "-p";
+  const suppressStats = interactive ? "" : ' "-s",';
   const resumeFlag = copilotSessionId ? `"--resume=${copilotSessionId}",` : "";
   const runnerScript = [
     'const { spawnSync } = require("node:child_process");',
     'const decode = (name) => Buffer.from(process.env[name] || "", "base64").toString("utf8");',
     useDefaultCopilotAgent
-      ? `const args = [${resumeFlag} "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user", "-s"];`
-      : `const args = [${resumeFlag} "--agent", decode("COPILOT_SUBAGENT_AGENT_B64"), "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user", "-s"];`,
+      ? `const args = [${resumeFlag} "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${suppressStats}];`
+      : `const args = [${resumeFlag} "--agent", decode("COPILOT_SUBAGENT_AGENT_B64"), "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${suppressStats}];`,
     `const result = spawnSync(${JSON.stringify(copilotBinary)}, args, { stdio: "inherit" });`,
     'const code = Number.isInteger(result.status) ? result.status : 1;',
     'process.stdout.write("\\n__SUBAGENT_DONE_" + code + "__\\n");',

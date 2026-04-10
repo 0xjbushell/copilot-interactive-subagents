@@ -114,7 +114,7 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "launch-await-completion-default",
     file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
-    from: "awaitCompletion: request.awaitCompletion !== false,",
+    from: "awaitCompletion: request.awaitCompletion ?? (interactive ? false : true),",
     to: "awaitCompletion: false,",
   },
   {
@@ -162,8 +162,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "state-running-status",
     file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
-    from: 'status: "running",',
-    to: 'status: "pending",',
+    from: 'const activeStatus = plan.interactive ? "interactive" : "running";',
+    to: 'const activeStatus = "pending";',
   },
   {
     id: "summary-explicit-priority",
