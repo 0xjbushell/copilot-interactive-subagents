@@ -367,7 +367,9 @@ Request:
   "agentIdentifier": "reviewer",
   "task": "Inspect the failing tests and summarize the root cause.",
   "backend": "tmux",
-  "awaitCompletion": true
+  "awaitCompletion": true,
+  "interactive": false,
+  "fork": { "copilotSessionId": "parent-uuid" }
 }
 ```
 

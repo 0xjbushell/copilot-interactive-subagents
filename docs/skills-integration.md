@@ -49,7 +49,9 @@ Call with an exact `agentIdentifier` and the task text you want the child to exe
   "agentIdentifier": "reviewer",
   "task": "Review the API contract changes and summarize correctness risks.",
   "backend": "tmux",
-  "awaitCompletion": true
+  "awaitCompletion": true,
+  "interactive": false,
+  "fork": { "copilotSessionId": "parent-uuid" }
 }
 ```
 

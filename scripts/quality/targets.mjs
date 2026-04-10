@@ -1,6 +1,7 @@
 const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/fork-session.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/mux-layout.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",

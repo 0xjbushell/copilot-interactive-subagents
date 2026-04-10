@@ -9,6 +9,7 @@ import {
 import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
 import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
+import { forkSession as defaultForkSession } from "./fork-session.mjs";
 
 const DEFAULT_MONITOR_ATTEMPTS = 240;
 
@@ -428,6 +429,38 @@ export async function launchSingleSubagent({
   const dependencies = resolveLaunchDependencies({ plan, request, services });
   if (dependencies.failure) {
     return dependencies.failure;
+  }
+
+  // Fork step: if fork param is set, fork parent session and use child's copilotSessionId
+  if (request.fork && plan.copilotSessionId) {
+    const forkSession = services.forkSession ?? defaultForkSession;
+    let parentId = request.fork.copilotSessionId;
+    if (!parentId && request.fork.launchId) {
+      const parentManifest = await dependencies.stateStore.readLaunchRecord(request.fork.launchId);
+      parentId = parentManifest?.copilotSessionId;
+    }
+    if (!parentId) {
+      return {
+        ok: false,
+        code: "FORK_INVALID",
+        message: "Fork requires copilotSessionId or a launchId with a copilotSessionId.",
+      };
+    }
+    const forkResult = forkSession({
+      parentCopilotSessionId: parentId,
+      copilotHome: request.copilotHome,
+      stateDir: request.stateDir,
+      services,
+    });
+    if (!forkResult.ok) {
+      return { ok: false, ...forkResult };
+    }
+    plan.copilotSessionId = forkResult.forkCopilotSessionId;
+    plan.fork = {
+      parentCopilotSessionId: forkResult.parentCopilotSessionId,
+      parentLaunchId: request.fork.launchId ?? null,
+    };
+    plan.eventsBaseline = forkResult.eventsBaseline;
   }
 
   let paneVisible = false;

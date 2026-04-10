@@ -64,6 +64,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       backend: "cmux|tmux|zellij (optional)",
       awaitCompletion: "boolean (optional, default true)",
       interactive: "boolean (optional, default false — use -i flag, pane stays open)",
+      fork: "{ launchId: string } | { copilotSessionId: string } (optional — fork parent session before launch)",
     },
     resultShape: {
       launchId: "string",
@@ -150,6 +151,14 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
       backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
       awaitCompletion: { type: "boolean" },
       interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
+      fork: {
+        type: "object",
+        description: "Fork a parent session before launching. Provide launchId or copilotSessionId.",
+        properties: {
+          launchId: { type: "string", description: "Launch ID to look up parent session." },
+          copilotSessionId: { type: "string", description: "Parent copilot session UUID to fork directly." },
+        },
+      },
     },
     required: ["agentIdentifier", "task"],
   },
