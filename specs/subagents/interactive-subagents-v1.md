@@ -150,7 +150,7 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 
 3. **Manifest is the single source of launch state**: Every launch/resume/fork operation reads and writes the manifest at `.copilot-interactive-subagents/launches/<launchId>.json`. No in-memory-only state.
 
-4. **Lockfile before mutation**: Any operation that reads or mutates a session (resume, fork, summary extraction, terminal transition) MUST acquire the per-`copilotSessionId` lockfile first. Atomic `O_CREAT | O_EXCL`. Release on completion or process exit.
+4. **Lockfile before mutation**: Any operation that **mutates** a session (resume, fork, terminal transition) MUST acquire the per-`copilotSessionId` lockfile first. Atomic `O_CREAT | O_EXCL`. Release on completion or process exit. **Read-only operations** (summary extraction) are exempt — `events.jsonl` is append-only by copilot, so reads are safe without locking.
 
 5. **Sequence: extract → manifest → close**: After autonomous completion, ALWAYS extract summary BEFORE closing the pane. The sequence is: detect sentinel → extract summary → update manifest to terminal → close pane.
 
@@ -455,13 +455,17 @@ extractSessionSummary({ copilotSessionId, sinceEventIndex }) → {
 }
 
 // Implementation steps:
-// 1. Read ~/.copilot/session-state/<UUID>/events.jsonl
+// 1. Build path: path.join(os.homedir(), '.copilot', 'session-state', copilotSessionId, 'events.jsonl')
+//    NOTE: Do NOT use '~/' — it is not expanded by Node path APIs.
 // 2. Parse JSONL tolerantly (ignore truncated trailing lines)
 // 3. If sinceEventIndex provided, skip events before that index (delta extraction)
+//    sinceEventIndex is a zero-based count of successfully parsed complete events already seen.
+//    lastEventIndex is the total count of successfully parsed complete events in the file.
 // 4. Find last assistant.message event (after sinceEventIndex if provided)
 // 5. Return data.content + current event count as lastEventIndex
 // 6. If no new assistant.message found → return summary: null (do NOT reuse old summary)
-// 7. Fallback: workspace.yaml summary field (only when sinceEventIndex is not set)
+// 7. Fallback: workspace.yaml — extract top-level `summary:` field via regex (do NOT add a YAML parser dependency)
+//    Only used when sinceEventIndex is not set (initial extraction, not delta)
 // 8. If session dir doesn't exist or events.jsonl is unreadable → return null gracefully
 ```
 

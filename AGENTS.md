@@ -23,7 +23,9 @@
     └── titles.mjs             # Pane title management
 
 test/                          # All test files (node:test + node:assert)
-├── *.test.mjs                 # Current: flat structure
+├── *.test.mjs                 # Legacy: flat structure (existing tests)
+├── unit/                      # v1: new unit tests go here (created by TIX-000015)
+│   └── *.test.mjs
 └── helpers/red-harness.mjs    # Module import + export validation
 
 scripts/
@@ -84,7 +86,14 @@ Skipping quality gates is not allowed. If a gate fails, fix the code — do not 
 When creating a new `.mjs` file under `lib/`:
 1. Add it to `DETERMINISTIC_LOGIC_TARGETS` in `scripts/quality/targets.mjs`
 2. Add targeted mutants for critical behavioral assertions
-3. Create a corresponding test file in `test/`
+3. Create a corresponding test file in `test/unit/` (v1 modules) or `test/` (legacy)
+
+### Test Conventions
+
+- New v1 unit tests go in `test/unit/` (requires TIX-000015 infrastructure)
+- Legacy tests remain flat in `test/`
+- Import modules via `test/helpers/red-harness.mjs#importProjectModule` — this ensures the module's exports are validated before tests run ("red first" pattern)
+- Follow the DI pattern: inject `services` param to stub `fs`, `child_process`, etc. See `lib/launch.mjs` lines 22-59 for the canonical DI example
 
 ## Specifications
 
