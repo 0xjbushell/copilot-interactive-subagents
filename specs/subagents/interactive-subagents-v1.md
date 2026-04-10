@@ -115,7 +115,7 @@ Users need: ephemeral panes that clean up automatically, persistent sessions tha
 cmux remains in the public tool interface and backend discovery but **does not receive v1 session features**. Specifically:
 - cmux launches continue to work as they do today (one-shot, no session ID, no pane cleanup)
 - `interactive`, `fork`, and `closePaneOnCompletion` parameters are ignored for cmux launches (logged as warning)
-- Resume of a cmux-launched session falls back to legacy reattach behavior
+- Resume of a cmux-launched session returns `RESUME_NOT_SUPPORTED` error (cmux manifests have `copilotSessionId: null` — no session to resume)
 - No cmux-specific tests are added or removed
 - **Manifest v2 fields for cmux**: `copilotSessionId: null`, `interactive: false`, `fork: null`, `closePaneOnCompletion: false`, `eventsBaseline: null`. The v2 schema applies to ALL launches (cmux included) — cmux simply gets null/false defaults for session-related fields.
 
@@ -159,7 +159,7 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 
 1. **Safe task transport**: NEVER interpolate user-provided task strings directly into shell commands. Use the existing base64 env var pattern (`COPILOT_SUBAGENT_TASK_B64`). This prevents shell injection.
 
-2. **Panes are ephemeral, sessions are persistent**: A pane is a disposable view. A session lives in the Copilot session-state directory (resolved at startup — see "Path Resolution" below) and survives pane death. Destroying a pane does NOT destroy a session.
+2. **Panes are ephemeral, sessions are persistent**: A pane is a disposable view. A session lives in the Copilot session-state directory (resolved at startup — see invariant 12) and survives pane death. Destroying a pane does NOT destroy a session.
 
 3. **Manifest is the single source of launch state**: Every launch/resume/fork operation reads and writes the manifest at `.copilot-interactive-subagents/launches/<launchId>.json`. No in-memory-only state.
 
@@ -229,7 +229,7 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 1. Generate `copilotSessionId` (UUID)
 2. Open pane via backend (`tmux split-window` / `zellij action new-pane`)
 3. Write launch manifest (status: **"pending"**) — persist BEFORE sending command so crash recovery can find orphaned panes
-4. Build launch command: preserve all existing flags from `createDefaultAgentLaunchCommand()` (including `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`, `-s`), and add `--resume=<copilotSessionId>` and `-p "task"`. **Task transport must use the existing safe encoding pattern** (base64 env var or equivalent) — never raw shell interpolation of user-provided task strings. **cmux backend**: skip `--resume` and `-s` — use legacy command builder path.
+4. Build launch command: preserve all existing flags from `createDefaultAgentLaunchCommand()` (including `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--no-ask-user`, `-s`), and add `--resume=<copilotSessionId>` and `-p "task"`. **Task transport must use the existing safe encoding pattern** (base64 env var or equivalent) — never raw shell interpolation of user-provided task strings. **cmux backend**: skip `--resume`, `-i`/`-p` selection, session ID env vars, and `-s` — use the legacy command builder path unchanged (see invariant 7).
 5. Wrap in node sentinel script, send to pane
 6. Update manifest (status: "running")
 7. Poll for sentinel (`__SUBAGENT_DONE_<code>__`) OR done signal file — whichever first
@@ -243,9 +243,10 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 4. Build launch command: preserve all existing flags, add `--resume=<copilotSessionId>` and `-i "task"` (replace `-p` with `-i`, omit `-s` for interactive). **Same safe transport rules apply** — task content must not be interpolated raw into the shell command.
 5. Send to pane directly (no sentinel wrapper needed — user may interact)
 6. Update manifest (status: "interactive")
-7. Return immediately with pane metadata and `resumePointer`
-8. User works in pane, exits via Ctrl+D
-9. On resume or status check: extract summary from session state
+7. If `awaitCompletion: false` (default for interactive): return immediately with pane metadata
+8. If `awaitCompletion: true`: monitor pane for process exit (same polling as autonomous, but no sentinel — rely on pane death + signal file). On completion: extract summary → update manifest → return result. Timeout still applies.
+9. User works in pane, exits via Ctrl+D or model concludes
+10. On resume or status check: extract summary from session state
 
 **Fork launch (`fork: { launchId }` or `fork: { copilotSessionId }`):**
 1. Resolve parent's `copilotSessionId` (from manifest if `launchId` provided, or use directly)
@@ -406,7 +407,7 @@ Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
 **Acceptance criteria**:
 - `metadataVersion: 2` in all new manifests
 - New fields serialize/deserialize correctly via JSON round-trip
-- `createManifestV2()` factory produces valid records with sensible defaults
+- Existing `createLaunchRecord()` updated to produce v2-shaped records (do NOT create a separate `createManifestV2()` function — AC references below use this name as shorthand for the updated factory)
 
 ---
 
@@ -613,7 +614,7 @@ Replaces legacy pane-reattach with new-pane + `--resume=<copilotSessionId>`.
 ```javascript
 // Request
 {
-  launchId: string,           // or via resumePointer/resumeReference
+  launchId: string,           // identifies which launch manifest to resume
   task: string | undefined,   // optional follow-up prompt
   awaitCompletion: boolean,   // default: false
 }
@@ -699,7 +700,7 @@ New parameters added to the `copilot_subagent_launch` tool alongside existing on
   } | {
     copilotSessionId: string, // fork directly from a known copilot session UUID
   } | undefined,
-  closePaneOnCompletion: boolean, // default: true. false = keep pane alive
+  closePaneOnCompletion: boolean, // default: true for autonomous, false for interactive
 }
 
 // Note: fork from the *current parent* session is not supported in v1 because
@@ -718,6 +719,7 @@ All structured errors use the envelope `{ ok: false, code: "<ERROR_CODE>", messa
 | `BACKEND_UNAVAILABLE` | launch, resume | Requested backend not detected | "Backend '{name}' is not available." |
 | `INVALID_FORK_TARGET` | launch | Fork parameter shape invalid | "Fork requires { launchId } or { copilotSessionId }." |
 | `PANE_OPEN_FAILED` | launch, resume | Backend refused to create pane | "Failed to open pane: {reason}." |
+| `RESUME_NOT_SUPPORTED` | resume | Manifest has `copilotSessionId: null` (cmux launch) | "This launch does not support resume (no session ID)." |
 
 ## What Changes
 
