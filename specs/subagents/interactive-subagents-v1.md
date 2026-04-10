@@ -223,6 +223,79 @@ These rules apply to ALL services and ALL code paths. Violating any of these is 
 └─────────────────────┘  └──────────────────────────────────┘
 ```
 
+### Parameter Flow — How `copilotSessionId` Threads Through the Call Chain
+
+Understanding this flow is essential for implementing v1. The existing codebase uses a **plan → persist → execute** pipeline. v1 adds `copilotSessionId` to the plan and threads it through all layers.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ handleLaunch(request, services)  [extension.mjs]                            │
+│   request.interactive, request.fork, request.closePaneOnCompletion          │
+│                                                                              │
+│   ↓ normalizes request, resolves agent + backend                             │
+│                                                                              │
+│ launchSingleSubagent({request, agentValidation, backendResolution, services})│
+│   [lib/launch.mjs]                                                           │
+│                                                                              │
+│   ↓ planSingleLaunch() — generates copilotSessionId HERE                     │
+│                                                                              │
+│ Plan object: { launchId, copilotSessionId, interactive, fork,                │
+│                closePaneOnCompletion, ...existing fields }                    │
+│                                                                              │
+│   ↓ openPaneAndPersist() — spreads plan into createLaunchRecord()            │
+│                                                                              │
+│ createLaunchRecord({...plan, paneId, status: "pending"})  [lib/state.mjs]    │
+│   → writes manifest with metadataVersion: 2                                 │
+│                                                                              │
+│   ↓ runChildLaunch() — calls launchAgentInPane() with plan + paneId          │
+│                                                                              │
+│ defaultLaunchAgentInPane({backend, paneId, task, ...context})                │
+│   [extension.mjs]                                                            │
+│   context NOW includes: copilotSessionId, launchId, interactive              │
+│                                                                              │
+│   ↓ calls createDefaultAgentLaunchCommand(request, runtimeServices, context) │
+│                                                                              │
+│ createDefaultAgentLaunchCommand(request, runtimeServices,                    │
+│   { agentIdentifier, task, copilotSessionId, launchId, interactive, backend})│
+│   → builds shell string with --resume=<copilotSessionId>,                    │
+│     -i/-p selection, env vars COPILOT_SUBAGENT_SESSION_ID + _LAUNCH_ID       │
+│   → cmux backend: skips --resume and v1 flags entirely                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Concrete changes per layer:**
+
+| Layer | File | Current Signature | What to Add |
+|-------|------|-------------------|-------------|
+| `planSingleLaunch()` | `lib/launch.mjs` | `({request, agentValidation, backendResolution, createLaunchId, now})` | Add `createCopilotSessionId = () => randomUUID()`. Extract `request.interactive` (default `false`), `request.fork` (default `null`), `request.closePaneOnCompletion` (default `!interactive`). Generate `copilotSessionId` via `createCopilotSessionId()` for tmux/zellij, `null` for cmux. Add all to returned plan. |
+| `createLaunchRecord()` | `lib/state.mjs` | `({launchId, agentIdentifier, ..., metadataVersion})` | Add params: `copilotSessionId = null`, `interactive = false`, `fork = null`, `closePaneOnCompletion = true`, `eventsBaseline = null`. Include in returned object. Bump `METADATA_VERSION` to `2`. |
+| `defaultLaunchAgentInPane()` | `extension.mjs` | `({backend, request, runtimeServices, ...context})` | Pass `context.copilotSessionId`, `context.launchId`, `context.interactive`, `context.backend` through to `createDefaultAgentLaunchCommand()`. |
+| `createDefaultAgentLaunchCommand()` | `extension.mjs` | `(request, runtimeServices, {agentIdentifier, task})` | Destructure `copilotSessionId`, `launchId`, `interactive`, `backend` from 3rd arg. If cmux: return existing command unchanged. Otherwise: add `--resume=<copilotSessionId>`, select `-i`/`-p`, set env vars, omit `-s` when interactive. |
+
+**How to test (mock pattern):**
+
+```javascript
+// Tests intercept via createExtensionHandlers() overrides — same as existing tests.
+// To verify command builder output, mock launchAgentInPane and capture the context:
+
+const handlers = await createExtensionHandlers({
+  // ... existing mocks for openPane, resolveLaunchBackend, etc.
+  launchAgentInPane: async (context) => {
+    // context now includes copilotSessionId, launchId, interactive, backend
+    capturedContext = context;
+    return { sessionId: "session-123" };
+  },
+});
+
+// To verify the actual shell command string, override createAgentLaunchCommand:
+const handlers = await createExtensionHandlers({
+  createAgentLaunchCommand: (request, runtimeServices, context) => {
+    capturedCommand = { request, context };
+    return "echo test-command";
+  },
+});
+```
+
 ### Data / Control Flow
 
 **Autonomous launch (`interactive: false`, default):**
@@ -369,6 +442,26 @@ Modifies `createDefaultAgentLaunchCommand()` to add `--resume=<UUID>` and select
 Adds new fields to the launch manifest. Bumps `metadataVersion` to 2.
 
 **Concrete change**: In `lib/state.mjs`, change `export const METADATA_VERSION = 1;` → `export const METADATA_VERSION = 2;` and add new fields to the existing `createLaunchRecord()` function (do NOT rename it — all existing call sites use this name). Update all tests that assert `metadataVersion: 1` (search: `grep -rn 'metadataVersion.*1' test/`). The spec's acceptance criterion `createManifestV2()` refers to this same function producing v2-shaped records.
+
+**v2 field defaults** (add to `createLaunchRecord()` parameter destructuring):
+
+```javascript
+export function createLaunchRecord({
+  // ... existing params unchanged ...
+  // NEW v2 params with defaults:
+  copilotSessionId = null,        // null for cmux, UUID for tmux/zellij
+  interactive = false,            // true if launched with -i flag
+  fork = null,                    // { parentCopilotSessionId, parentLaunchId } or null
+  closePaneOnCompletion = true,   // caller overrides to false for interactive
+  eventsBaseline = null,          // event count at launch time, for delta summary
+  metadataVersion = METADATA_VERSION,  // now 2
+} = {}) {
+  // ... existing validation/normalization ...
+  // Add new fields to returned object alongside existing ones
+}
+```
+
+**Important**: `closePaneOnCompletion` defaults to `true` in the factory because `planSingleLaunch()` is responsible for setting the context-dependent default (`!interactive`). The factory is a dumb record builder — it does not infer defaults from other fields.
 
 ```javascript
 // Launch manifest v2 shape:
