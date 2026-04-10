@@ -7,7 +7,8 @@ import {
   createStateStore as defaultCreateStateStore,
 } from "./state.mjs";
 import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
-import { extractLaunchSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { closePane as defaultClosePane } from "./close-pane.mjs";
 
 const DEFAULT_MONITOR_ATTEMPTS = 240;
 
@@ -169,6 +170,7 @@ function resolveLaunchDependencies({ plan, request, services }) {
     launchAgentInPane,
     readPaneOutput: resolveOperation({ request, services, name: "readPaneOutput" }),
     readChildSessionState: resolveOperation({ request, services, name: "readChildSessionState" }),
+    closePane: resolveOperation({ request, services, name: "closePane" }) ?? defaultClosePane,
   };
 }
 
@@ -232,6 +234,7 @@ async function runChildLaunch({
   paneVisible,
   readPaneOutput,
   readChildSessionState,
+  closePane,
 }) {
   const childLaunch = await launchAgentInPane({
     backend: plan.backend,
@@ -278,9 +281,24 @@ async function runChildLaunch({
     sleep: request.sleep,
     request,
   });
+  // Completion pipeline: extract session summary → update manifest → close pane
+  let completionSummary = completion.summary;
+  let completionSummarySource = completion.summarySource;
+
+  if (plan.copilotSessionId) {
+    const sessionSummary = extractSessionSummary({
+      copilotSessionId: plan.copilotSessionId,
+      sinceEventIndex: plan.eventsBaseline ?? undefined,
+    });
+    if (sessionSummary.summary) {
+      completionSummary = sessionSummary.summary;
+      completionSummarySource = sessionSummary.source;
+    }
+  }
+
   const terminalManifest = await stateStore.updateLaunchRecord(plan.launchId, {
     status: completion.status,
-    summary: completion.summary,
+    summary: completionSummary,
     exitCode: completion.exitCode,
   });
   await updateLaunchIndexBestEffort({
@@ -289,12 +307,20 @@ async function runChildLaunch({
     request,
   });
 
+  if (plan.closePaneOnCompletion && typeof closePane === "function") {
+    try {
+      closePane({ backend: plan.backend, paneId: activeManifest.paneId });
+    } catch {
+      // Pane close is best-effort — don't fail the launch
+    }
+  }
+
   return shapeLaunchResult({
     manifest: terminalManifest,
     request,
     launchAction: plan.launchAction,
     paneVisible,
-    summarySource: completion.summarySource,
+    summarySource: completionSummarySource,
   });
 }
 
@@ -426,6 +452,7 @@ export async function launchSingleSubagent({
       paneVisible,
       readPaneOutput: dependencies.readPaneOutput,
       readChildSessionState: dependencies.readChildSessionState,
+      closePane: dependencies.closePane,
     });
   } catch (error) {
     return handleLaunchError({

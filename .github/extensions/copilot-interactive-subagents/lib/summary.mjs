@@ -6,7 +6,12 @@ const FALLBACK_STATE_TEXT = {
   cancelled: "was cancelled",
   timeout: "timed out",
   running: "is running",
+  interactive: "is running interactively",
 };
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir as defaultHomedir } from "node:os";
 
 function normalizeOptionalText(value) {
   if (typeof value !== "string") {
@@ -111,6 +116,62 @@ export function extractLaunchSummary({
       exitCode,
     }),
   };
+}
+
+function parseEventsJsonl(raw) {
+  const events = [];
+  for (const line of raw.split("\n")) {
+    if (line.trim().length === 0) continue;
+    try { events.push(JSON.parse(line)); } catch { /* truncated trailing line */ }
+  }
+  return events;
+}
+
+function findLastAssistantContent(events) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.type === "assistant.message" && event.data?.content) {
+      return normalizeOptionalText(event.data.content);
+    }
+  }
+  return null;
+}
+
+export function extractSessionSummary({
+  copilotSessionId,
+  sinceEventIndex,
+  copilotHome,
+  services = {},
+} = {}) {
+  const homedir = services.homedir ?? defaultHomedir;
+  const readFile = services.readFileSync ?? readFileSync;
+  const home = copilotHome ?? join(homedir(), ".copilot");
+  const sessionDir = join(home, "session-state", copilotSessionId);
+
+  let events;
+  try {
+    events = parseEventsJsonl(readFile(join(sessionDir, "events.jsonl"), "utf8"));
+  } catch {
+    return { summary: null, source: "fallback", lastEventIndex: 0 };
+  }
+
+  const totalEvents = events.length;
+  const startIndex = typeof sinceEventIndex === "number" ? sinceEventIndex : 0;
+  const content = findLastAssistantContent(events.slice(startIndex));
+  if (content) {
+    return { summary: content, source: "events.jsonl", lastEventIndex: totalEvents };
+  }
+
+  if (typeof sinceEventIndex !== "number") {
+    try {
+      const yaml = readFile(join(sessionDir, "workspace.yaml"), "utf8");
+      const match = yaml.match(/^summary:\s*(.+)$/m);
+      const text = match ? normalizeOptionalText(match[1]) : null;
+      if (text) return { summary: text, source: "workspace.yaml", lastEventIndex: totalEvents };
+    } catch { /* No workspace.yaml */ }
+  }
+
+  return { summary: null, source: sinceEventIndex != null ? "events.jsonl" : "fallback", lastEventIndex: totalEvents };
 }
 
 export async function waitForLaunchCompletion({
