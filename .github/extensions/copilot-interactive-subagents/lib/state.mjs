@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const METADATA_VERSION = 1;
+export const METADATA_VERSION = 2;
 export const LAUNCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
 const DEFAULT_STORE_DIRECTORY = path.join(".copilot-interactive-subagents", "launches");
@@ -73,6 +73,11 @@ export function createLaunchRecord({
   summary = null,
   exitCode = null,
   metadataVersion = METADATA_VERSION,
+  copilotSessionId = null,
+  interactive = false,
+  fork = null,
+  closePaneOnCompletion = true,
+  eventsBaseline = null,
 } = {}) {
   const validatedLaunchId = assertValidLaunchId(launchId);
   return {
@@ -87,6 +92,11 @@ export function createLaunchRecord({
     summary: normalizeOptionalText(summary),
     exitCode: normalizeExitCode(exitCode),
     metadataVersion,
+    copilotSessionId: copilotSessionId ?? null,
+    interactive: interactive === true,
+    fork: fork ?? null,
+    closePaneOnCompletion: closePaneOnCompletion !== false,
+    eventsBaseline: eventsBaseline ?? null,
   };
 }
 

@@ -46,7 +46,12 @@ describe("launch state persistence", () => {
       status: "pending",
       summary: null,
       exitCode: null,
-      metadataVersion: 1,
+      metadataVersion: 2,
+      copilotSessionId: null,
+      interactive: false,
+      fork: null,
+      closePaneOnCompletion: true,
+      eventsBaseline: null,
     });
   });
 
@@ -93,7 +98,12 @@ describe("launch state persistence", () => {
       status: "success",
       summary: "Completed the requested review",
       exitCode: 0,
-      metadataVersion: 1,
+      metadataVersion: 2,
+      copilotSessionId: null,
+      interactive: false,
+      fork: null,
+      closePaneOnCompletion: true,
+      eventsBaseline: null,
     });
   });
 

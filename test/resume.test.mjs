@@ -62,7 +62,7 @@ describe("resume pane-backed launches from stored metadata", () => {
       sessionId: "session-from-index",
       requestedAt: "2026-03-19T00:00:00.000Z",
       status: "running",
-      metadataVersion: 1,
+      metadataVersion: 2,
       manifestPath: "/tmp/elsewhere/launch-workspace-first.json",
     });
 
@@ -107,7 +107,7 @@ describe("resume pane-backed launches from stored metadata", () => {
       sessionId: "session-index-only",
       requestedAt: "2026-03-19T00:00:00.000Z",
       status: "running",
-      metadataVersion: 1,
+      metadataVersion: 2,
       manifestPath: path.join(workspacePath, "missing.json"),
     });
 
@@ -242,7 +242,7 @@ describe("resume pane-backed launches from stored metadata", () => {
       summary: "Resumed the running reviewer session",
       summarySource: "assistant-message",
       exitCode: 0,
-      metadataVersion: 1,
+      metadataVersion: 2,
       resumePointer: {
         launchId: "launch-success",
         sessionId: "session-running",

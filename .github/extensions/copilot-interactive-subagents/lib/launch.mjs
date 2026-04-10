@@ -239,6 +239,9 @@ async function runChildLaunch({
     agentIdentifier: plan.agentIdentifier,
     agentKind: plan.agentKind,
     task: plan.task,
+    copilotSessionId: plan.copilotSessionId,
+    launchId: plan.launchId,
+    interactive: plan.interactive,
     request,
   });
 
@@ -353,13 +356,16 @@ export function planSingleLaunch({
   agentValidation,
   backendResolution,
   createLaunchId = () => randomUUID(),
+  createCopilotSessionId = () => randomUUID(),
   now = () => new Date().toISOString(),
 } = {}) {
+  const backend = backendResolution.selectedBackend;
+  const interactive = request.interactive === true;
   return {
     launchId: createLaunchId(),
     agentIdentifier: agentValidation.identifier,
     agentKind: agentValidation.agentKind,
-    backend: backendResolution.selectedBackend,
+    backend,
     launchAction: backendResolution.action,
     backendSessionName: backendResolution.sessionName ?? null,
     task: request.task,
@@ -369,6 +375,11 @@ export function planSingleLaunch({
     summary: null,
     exitCode: null,
     metadataVersion: METADATA_VERSION,
+    copilotSessionId: backend === "cmux" ? null : createCopilotSessionId(),
+    interactive,
+    fork: request.fork ?? null,
+    closePaneOnCompletion: request.closePaneOnCompletion ?? !interactive,
+    eventsBaseline: null,
   };
 }
 

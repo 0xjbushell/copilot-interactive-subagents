@@ -806,23 +806,25 @@ function extractPaneId(stdout = "") {
   return paneId || null;
 }
 
-function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task }) {
+function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task, copilotSessionId, interactive, backend }) {
   const createAgentLaunchCommand =
     request.createAgentLaunchCommand ?? runtimeServices.createAgentLaunchCommand;
   if (typeof createAgentLaunchCommand === "function") {
-    return createAgentLaunchCommand({ agentIdentifier, task });
+    return createAgentLaunchCommand({ agentIdentifier, task, copilotSessionId, interactive, backend });
   }
 
   const copilotBinary = request.copilotBinary ?? runtimeServices.copilotBinary ?? "copilot";
   const agentIdentifierB64 = encodeBase64(agentIdentifier);
   const taskB64 = encodeBase64(task ?? "");
   const useDefaultCopilotAgent = agentIdentifier === "github-copilot";
+  const promptFlag = interactive ? "-i" : "-p";
+  const resumeFlag = copilotSessionId ? `"--resume=${copilotSessionId}",` : "";
   const runnerScript = [
     'const { spawnSync } = require("node:child_process");',
     'const decode = (name) => Buffer.from(process.env[name] || "", "base64").toString("utf8");',
     useDefaultCopilotAgent
-      ? 'const args = ["-p", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user", "-s"];'
-      : 'const args = ["--agent", decode("COPILOT_SUBAGENT_AGENT_B64"), "-p", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user", "-s"];',
+      ? `const args = [${resumeFlag} "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user", "-s"];`
+      : `const args = [${resumeFlag} "--agent", decode("COPILOT_SUBAGENT_AGENT_B64"), "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user", "-s"];`,
     `const result = spawnSync(${JSON.stringify(copilotBinary)}, args, { stdio: "inherit" });`,
     'const code = Number.isInteger(result.status) ? result.status : 1;',
     'process.stdout.write("\\n__SUBAGENT_DONE_" + code + "__\\n");',
