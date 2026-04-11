@@ -56,7 +56,7 @@ describe("Ephemeral pane lifecycle", () => {
       });
 
       assert.equal(result.ok, true);
-      assert.equal(capturedEnv.ZELLIJ_PANE_ID, "pane:42");
+      assert.equal(capturedEnv.ZELLIJ_PANE_ID, "42");
     });
 
     it("GIVEN pane already dead WHEN closePane called THEN returns ok with alreadyClosed", async () => {

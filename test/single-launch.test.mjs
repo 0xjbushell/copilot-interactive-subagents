@@ -630,7 +630,6 @@ describe("single pane-backed launch orchestration", () => {
     );
 
     const calls = [];
-    let launchEnv = null;
     const launchCommand = "printf 'assistant: Zellij fallback launch queued\\n__SUBAGENT_DONE_0__\\n'";
     const handlers = await createExtensionHandlers({
       resolveLaunchBackend: async () => ({
@@ -650,22 +649,13 @@ describe("single pane-backed launch orchestration", () => {
           return { stdout: "" };
         }
 
-        // New flow: zellij run with bash -c script that writes pane ID
+        // New flow: zellij run with bash -c script that writes pane ID and waits for command file
         if (args[0] === "run") {
           const scriptArg = args[args.length - 1];
           const match = scriptArg.match(/>\s*(['"]?)(.+?)\1\s*&&/);
           if (match) {
             await writeFile(match[2], "84\n", "utf8");
           }
-          return { stdout: "" };
-        }
-
-        if (args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand) {
-          launchEnv = env;
-          return { stdout: "" };
-        }
-
-        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
           return { stdout: "" };
         }
 
@@ -697,7 +687,6 @@ describe("single pane-backed launch orchestration", () => {
     assert.equal(calls[0]?.args[1], "new-pane");
     const runIndex = calls.findIndex(({ args }) => args[0] === "run");
     assert.ok(runIndex >= 0, "should have called zellij run for pane-id capture");
-    assert.equal(launchEnv?.ZELLIJ_PANE_ID, "84");
   });
 
   it("GIVEN zellij default launch falls back to pane-id temp-file capture AND the temp file exists empty before the pane id is written WHEN launch proceeds THEN it still reaches running with the captured pane id", async (t) => {

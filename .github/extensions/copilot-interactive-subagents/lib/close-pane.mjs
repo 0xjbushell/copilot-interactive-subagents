@@ -18,7 +18,8 @@ export function closePane({ backend, paneId, services = {} } = {}) {
     return interpretResult(spawnSync("tmux", ["kill-pane", "-t", paneId], { stdio: "pipe" }), "tmux kill-pane");
   }
   if (backend === "zellij") {
-    const env = { ...process.env, ZELLIJ_PANE_ID: paneId };
+    const numericId = String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
+    const env = { ...process.env, ZELLIJ_PANE_ID: numericId };
     return interpretResult(spawnSync("zellij", ["action", "close-pane"], { stdio: "pipe", env }), "zellij close-pane");
   }
 
