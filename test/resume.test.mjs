@@ -222,6 +222,65 @@ describe("resume pane-backed launches from stored metadata", () => {
     assert.equal(stored.paneId, "%20");
   });
 
+  it("GIVEN no openPaneAndSendCommand WHEN openPane + launchAgentInPane exist THEN resume falls back to composing them", async (t) => {
+    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-fallback-");
+    const { resumeSubagent } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      ["resumeSubagent"],
+    );
+    const { createStateStore } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      ["createStateStore"],
+    );
+
+    const stateStore = await writeLaunchRecord({
+      workspacePath,
+      record: {
+        launchId: "launch-fallback",
+        agentIdentifier: "reviewer",
+        agentKind: "custom",
+        backend: "tmux",
+        paneId: "%9",
+        sessionId: null,
+        copilotSessionId: "csid-fallback-123",
+        requestedAt: "2026-03-19T00:00:00.000Z",
+        status: "success",
+      },
+    });
+
+    const openPaneCalls = [];
+    const launchCalls = [];
+
+    const result = await resumeSubagent({
+      request: {
+        launchId: "launch-fallback",
+        workspacePath,
+      },
+      services: {
+        stateStore,
+        acquireLock: () => ({ release: () => {} }),
+        probeSessionLiveness: () => false,
+        openPane: async (ctx) => { openPaneCalls.push(ctx); return { paneId: "%30" }; },
+        launchAgentInPane: async (ctx) => { launchCalls.push(ctx); return { sessionId: "new-session" }; },
+        readFileSync: () => { throw new Error("ENOENT"); },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.status, "interactive");
+    assert.equal(result.paneId, "%30");
+    assert.equal(openPaneCalls.length, 1);
+    assert.equal(openPaneCalls[0].backend, "tmux");
+    assert.equal(launchCalls.length, 1);
+    assert.equal(launchCalls[0].paneId, "%30");
+    assert.equal(launchCalls[0].copilotSessionId, "csid-fallback-123");
+    assert.equal(launchCalls[0].agentIdentifier, "reviewer");
+
+    const stored = await createStateStore({ workspacePath }).readLaunchRecord("launch-fallback");
+    assert.equal(stored.paneId, "%30");
+    assert.equal(stored.status, "interactive");
+  });
+
   it("GIVEN stored tmux metadata without copilotSessionId WHEN resume runs THEN it returns RESUME_UNSUPPORTED", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-sessionless-");
     const { resumeSubagent } = await importProjectModule(

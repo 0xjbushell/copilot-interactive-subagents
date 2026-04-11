@@ -262,9 +262,27 @@ async function openResumePane({ manifest, request, services }) {
       task: request.task,
       request,
     });
-    return result?.paneId ?? manifest.paneId;
+    return { paneId: result?.paneId ?? manifest.paneId, sessionId: result?.sessionId ?? null };
   }
-  return manifest.paneId;
+
+  // Fallback: compose openPane + launchAgentInPane from separate services
+  const openPane = resolveOperation({ request, services, name: "openPane" });
+  const launchAgentInPane = resolveOperation({ request, services, name: "launchAgentInPane" });
+  if (typeof openPane === "function" && typeof launchAgentInPane === "function") {
+    const pane = await openPane({ backend: manifest.backend, request });
+    const child = await launchAgentInPane({
+      backend: manifest.backend,
+      request,
+      paneId: pane.paneId,
+      agentIdentifier: manifest.agentIdentifier,
+      task: request.task ?? "",
+      copilotSessionId: manifest.copilotSessionId,
+      interactive: false,
+    });
+    return { paneId: pane.paneId, sessionId: child?.sessionId ?? null };
+  }
+
+  return { paneId: manifest.paneId, sessionId: null };
 }
 
 export async function resumeSubagent({ request = {}, services = {} } = {}) {
@@ -319,7 +337,8 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
     cleanupStaleSignalFile({ copilotSessionId: manifest.copilotSessionId, stateDir: request.stateDir, services });
 
     // Step 5: Open new pane + send resume command
-    const newPaneId = await openResumePane({ manifest, request, services });
+    const resumePane = await openResumePane({ manifest, request, services });
+    const newPaneId = resumePane.paneId;
 
     // Step 6: Update manifest
     const updatedManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, {
