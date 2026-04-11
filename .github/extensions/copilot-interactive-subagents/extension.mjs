@@ -801,11 +801,13 @@ function getPaneCaptureArgs(backend, paneId, outputPath) {
 }
 
 function buildOpenPaneArgs(backend, context = {}) {
+  const orientation = context.layout?.orientation;
   switch (backend) {
     case "tmux":
       return [
         "split-window",
-        "-h",
+        // -h = horizontal split (pane appears right), -v = vertical (pane appears below)
+        orientation === "horizontal" ? "-v" : "-h",
         ...(context.launchAction === "start" && context.backendSessionName ? ["-t", context.backendSessionName] : []),
         "-P",
         "-F",
@@ -816,7 +818,7 @@ function buildOpenPaneArgs(backend, context = {}) {
         "action",
         "new-pane",
         "--direction",
-        "right",
+        orientation === "horizontal" ? "down" : "right",
         "--name",
         context.agentIdentifier ?? "copilot-subagent",
       ];
@@ -898,17 +900,13 @@ async function defaultOpenPane({ backend, request, runtimeServices = {}, ...cont
       "pane-id.txt",
     );
     try {
+      const direction = context.layout?.orientation === "horizontal" ? "down" : "right";
+      const captureScript = `echo "$ZELLIJ_PANE_ID" > ${shellEscape(paneIdPath)} && exec bash`;
       await runDefaultBackendCommand({
         request: withoutZellijPaneRequest(request),
         runtimeServices,
         backend,
-        args: ["action", "write-chars", `echo "$ZELLIJ_PANE_ID" > ${shellEscape(paneIdPath)}`],
-      });
-      await runDefaultBackendCommand({
-        request: withoutZellijPaneRequest(request),
-        runtimeServices,
-        backend,
-        args: ["action", "write", "13"],
+        args: ["run", "--direction", direction, "--name", context.agentIdentifier ?? "copilot-subagent", "--", "bash", "-c", captureScript],
       });
       const capturedPaneId = (await waitForFileText(paneIdPath)).trim();
       if (capturedPaneId) {
