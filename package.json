@@ -6,7 +6,7 @@
     "test": "node --test test/*.test.mjs test/unit/*.test.mjs",
     "test:unit": "node --test test/unit/*.test.mjs",
     "test:integration": "node --test test/integration/*.test.mjs 2>/dev/null || echo 'No integration tests found'",
-    "test:e2e": "node --test test/e2e/*.test.mjs 2>/dev/null || echo 'No e2e tests found'",
+    "test:e2e": "node --test --test-concurrency=1 --test-timeout=180000 test/e2e/*.test.mjs",
     "test:coverage": "c8 --reporter=text --reporter=json-summary node --test test/*.test.mjs test/unit/*.test.mjs",
     "test:crap": "node scripts/test-crap.mjs",
     "test:mutation": "node scripts/test-mutation.mjs"

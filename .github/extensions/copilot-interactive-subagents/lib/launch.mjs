@@ -199,6 +199,7 @@ async function openPaneAndPersist({ plan, request, openPane, stateStore, stateIn
   const pane = await openPane({
     backend: plan.backend,
     launchAction: plan.launchAction,
+    backendSessionName: plan.backendSessionName,
     agentIdentifier: plan.agentIdentifier,
     task: plan.task,
     visible: true,
