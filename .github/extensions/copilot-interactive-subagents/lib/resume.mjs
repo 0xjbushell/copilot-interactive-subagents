@@ -318,16 +318,19 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
   }
 
   try {
-    // Step 2: Verify pane is dead
-    const probeSessionLiveness = services.probeSessionLiveness ?? defaultProbeSessionLiveness;
-    if (probeSessionLiveness({ backend: manifest.backend, paneId: manifest.paneId, services })) {
-      lock.release();
-      return shapeResumeFailure({
-        code: "SESSION_ACTIVE",
-        message: "Session pane is still alive. Close or wait for completion before resuming.",
-        manifest,
-        request,
-      });
+    // Step 2: Verify pane is dead (skip for terminal statuses — manifest is authoritative)
+    const isTerminalStatus = manifest.status === "success" || manifest.status === "failed" || manifest.status === "timeout";
+    if (!isTerminalStatus) {
+      const probeSessionLiveness = services.probeSessionLiveness ?? defaultProbeSessionLiveness;
+      if (probeSessionLiveness({ backend: manifest.backend, paneId: manifest.paneId, services })) {
+        lock.release();
+        return shapeResumeFailure({
+          code: "SESSION_ACTIVE",
+          message: "Session pane is still alive. Close or wait for completion before resuming.",
+          manifest,
+          request,
+        });
+      }
     }
 
     // Step 3: Record eventsBaseline BEFORE launching child

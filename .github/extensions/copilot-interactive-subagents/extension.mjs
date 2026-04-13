@@ -805,6 +805,8 @@ function buildOpenPaneArgs(backend, context = {}) {
         orientation === "horizontal" ? "down" : "right",
         "--name",
         context.agentIdentifier ?? "copilot-subagent",
+        "--",
+        "bash",
       ];
     default:
       throw createRuntimeUnavailableError("openPane", backend);
@@ -813,7 +815,11 @@ function buildOpenPaneArgs(backend, context = {}) {
 
 function extractPaneId(stdout = "") {
   const paneId = String(stdout).trim().split(/\r?\n/).filter(Boolean).at(-1);
-  return paneId || null;
+  if (!paneId) return null;
+  // Normalize zellij's "terminal_N" format to our internal "pane:N"
+  const zellijMatch = paneId.match(/^terminal_(\d+)$/);
+  if (zellijMatch) return `pane:${zellijMatch[1]}`;
+  return paneId;
 }
 
 export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task, copilotSessionId, interactive, backend }) {
