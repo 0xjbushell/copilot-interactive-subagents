@@ -315,6 +315,7 @@ async function runChildLaunch({
   if (plan.closePaneOnCompletion && typeof closePane === "function") {
     try {
       closePane({ backend: plan.backend, paneId: activeManifest.paneId });
+      paneVisible = false;
     } catch {
       // Pane close is best-effort — don't fail the launch
     }

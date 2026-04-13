@@ -116,8 +116,22 @@ function createZellijDriver() {
     },
 
     async teardown() {
-      // We don't destroy the session — it's the user's active session.
-      // Individual panes are closed by the extension or test cleanup.
+      // Close all non-default panes to prevent accumulation across test suites.
+      // Zellij reuses the session so orphan panes from prior tests can cause
+      // resource exhaustion and timeouts.
+      try {
+        const { stdout } = await execFile("zellij", ["action", "list-panes"]);
+        const lines = stdout.trim().split("\n").slice(1); // skip header
+        for (const line of lines) {
+          const id = line.split(/\s+/)[0]; // e.g. "terminal_5"
+          const numericId = id.replace("terminal_", "");
+          if (numericId !== "0") {
+            try {
+              await execFile("zellij", ["action", "close-pane", "--pane-id", numericId]);
+            } catch { /* best effort */ }
+          }
+        }
+      } catch { /* list-panes not available or failed */ }
     },
 
     env() {

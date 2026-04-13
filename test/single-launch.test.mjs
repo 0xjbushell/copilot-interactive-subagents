@@ -185,7 +185,7 @@ describe("single pane-backed launch orchestration", () => {
       backend: "tmux",
       launchAction: "attach",
       paneId: "%1",
-      paneVisible: true,
+      paneVisible: false,
       sessionId: "session-123",
       summary: "Reviewed failing tests and proposed a fix",
       summarySource: "assistant-message",
