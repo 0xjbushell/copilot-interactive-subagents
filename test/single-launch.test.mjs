@@ -581,19 +581,11 @@ describe("single pane-backed launch orchestration", () => {
           return { stdout: "pane:42\n" };
         }
 
-        if (args[0] === "action" && args[1] === "write-chars" && /ZELLIJ_PANE_ID/.test(args[2] ?? "")) {
-          const match = args[2].match(/>\s*(['"]?)(.+?)\1$/);
-          if (match) {
-            await writeFile(match[2], "42\n", "utf8");
-          }
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
-        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
-          return { stdout: "" };
-        }
-
-        if (args[0] === "action" && args[1] === "write-chars") {
+        if (args[0] === "action" && args[1] === "write" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
@@ -618,8 +610,8 @@ describe("single pane-backed launch orchestration", () => {
     assert.equal(result.backend, "zellij");
     assert.equal(result.launchAction, "attach");
     assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "new-pane"));
-    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand));
-    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write" && args[2] === "13"));
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write-chars" && args[2] === "--pane-id" && args[3] === "42" && args[4] === launchCommand));
+    assert.ok(calls.some(({ args }) => args[0] === "action" && args[1] === "write" && args[2] === "--pane-id" && args[3] === "42" && args[4] === "13"));
   });
 
   it("GIVEN zellij new-pane omits a pane id WHEN the default launch path runs THEN launch metadata falls back to the pane-id temp file flow", async (t) => {
@@ -649,13 +641,21 @@ describe("single pane-backed launch orchestration", () => {
           return { stdout: "" };
         }
 
-        // New flow: zellij run with bash -c script that writes pane ID and waits for command file
+        // New flow: zellij run with bash -c script that writes pane ID then exec bash
         if (args[0] === "run") {
           const scriptArg = args[args.length - 1];
           const match = scriptArg.match(/>\s*(['"]?)(.+?)\1\s*&&/);
           if (match) {
             await writeFile(match[2], "84\n", "utf8");
           }
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === "--pane-id") {
+          return { stdout: "" };
+        }
+
+        if (args[0] === "action" && args[1] === "write" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
@@ -738,11 +738,11 @@ describe("single pane-backed launch orchestration", () => {
           return { stdout: "" };
         }
 
-        if (args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand) {
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
-        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
+        if (args[0] === "action" && args[1] === "write" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
@@ -778,7 +778,6 @@ describe("single pane-backed launch orchestration", () => {
     );
 
     const calls = [];
-    let dumpScreenEnv = null;
     const launchCommand = "printf 'assistant: Zellij monitor path queued\\n__SUBAGENT_DONE_0__\\n'";
     const handlers = await createExtensionHandlers({
       resolveLaunchBackend: async () => ({
@@ -798,31 +797,18 @@ describe("single pane-backed launch orchestration", () => {
           return { stdout: "pane:42\n" };
         }
 
-        if (args[0] === "action" && args[1] === "write-chars" && args[2] === launchCommand) {
+        if (args[0] === "action" && args[1] === "write-chars" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
-        if (args[0] === "action" && args[1] === "write" && args[2] === "13") {
+        if (args[0] === "action" && args[1] === "write" && args[2] === "--pane-id") {
           return { stdout: "" };
         }
 
         if (args[0] === "action" && args[1] === "dump-screen") {
-          dumpScreenEnv = env;
-          if (args.includes("--pane-id")) {
-            throw new Error(`zellij rejected invalid dump-screen invocation: ${args.join(" ")}`);
-          }
-
-          const outputPath = args.find((value) => /copilot-subagents-zellij-screen/.test(String(value)));
-          if (!outputPath) {
-            throw new Error(`expected dump-screen output path in: ${args.join(" ")}`);
-          }
-
-          await writeFile(
-            outputPath,
-            "assistant: Zellij monitor path succeeded\n__SUBAGENT_DONE_0__\n",
-            "utf8",
-          );
-          return { stdout: "" };
+          assert.ok(args.includes("--pane-id"), "dump-screen should use --pane-id flag");
+          assert.ok(args.includes("42"), "dump-screen should target pane 42");
+          return { stdout: "assistant: Zellij monitor path succeeded\n__SUBAGENT_DONE_0__\n" };
         }
 
         assert.fail(`unexpected zellij args: ${args.join(" ")}`);
@@ -846,10 +832,9 @@ describe("single pane-backed launch orchestration", () => {
 
     assert.ok(dumpScreenCall, "expected zellij dump-screen monitoring call");
     assert.ok(
-      !dumpScreenCall.args.includes("--pane-id"),
-      `invalid zellij dump-screen invocation: ${dumpScreenCall.args.join(" ")}`,
+      dumpScreenCall.args.includes("--pane-id"),
+      "dump-screen should use --pane-id flag",
     );
-    assert.equal(dumpScreenEnv?.ZELLIJ_PANE_ID, "42");
     assert.equal(result.status, "success");
     assert.equal(result.backend, "zellij");
     assert.equal(result.paneId, "pane:42");

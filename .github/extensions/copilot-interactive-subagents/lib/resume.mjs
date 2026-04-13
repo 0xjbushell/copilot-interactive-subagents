@@ -11,7 +11,6 @@ import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
 import { probeSessionLiveness as defaultProbeSessionLiveness } from "./mux.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
 import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 
@@ -207,15 +206,10 @@ function countSessionEvents({ copilotSessionId, copilotHome, services = {} }) {
 }
 
 async function awaitResumeCompletion({
-  manifest, request, services, newPaneId, eventsBaseline, plan, zellijExitFile,
+  manifest, request, services, newPaneId, eventsBaseline, plan,
 }) {
   const readPaneOutput = resolveOperation({ request, services, name: "readPaneOutput" });
   const readChildSessionState = resolveOperation({ request, services, name: "readChildSessionState" });
-
-  // Wrap readPaneOutput with zellij exit file for file-based monitoring
-  const monitorReadPaneOutput = zellijExitFile
-    ? (ctx) => readPaneOutput({ ...ctx, zellijExitFile })
-    : readPaneOutput;
 
   const completion = await waitForLaunchCompletion({
     backend: manifest.backend,
@@ -223,7 +217,7 @@ async function awaitResumeCompletion({
     sessionId: manifest.sessionId,
     agentIdentifier: manifest.agentIdentifier,
     request,
-    readPaneOutput: monitorReadPaneOutput,
+    readPaneOutput,
     readChildSessionState,
     maxAttempts: request.maxMonitorAttempts ?? 25,
     pollIntervalMs: request.pollIntervalMs ?? 500,
@@ -285,18 +279,10 @@ async function openResumePane({ manifest, request, services }) {
       task: request.task ?? "",
       copilotSessionId: manifest.copilotSessionId,
       interactive: false,
-      // Thread zellij command-file IPC context
-      ...(pane.zellijCommandFile ? {
-        zellijCommandFile: pane.zellijCommandFile,
-        zellijCommandReady: pane.zellijCommandReady,
-        zellijTempDir: pane.zellijTempDir,
-      } : {}),
     });
     return {
       paneId: pane.paneId,
       sessionId: child?.sessionId ?? null,
-      zellijExitFile: pane.zellijExitFile,
-      zellijTempDir: pane.zellijTempDir,
     };
   }
 
@@ -382,20 +368,9 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
 
     // Step 8: If awaitCompletion, monitor
     if (request.awaitCompletion) {
-      const result = await awaitResumeCompletion({
+      return await awaitResumeCompletion({
         manifest, request, services, newPaneId, eventsBaseline, plan,
-        zellijExitFile: resumePane.zellijExitFile,
       });
-      // Clean up zellij temp dir after monitoring
-      if (resumePane.zellijTempDir) {
-        rm(resumePane.zellijTempDir, { force: true, recursive: true }).catch(() => {});
-      }
-      return result;
-    }
-
-    // Fire-and-forget: delayed cleanup of zellij temp dir
-    if (resumePane.zellijTempDir) {
-      setTimeout(() => rm(resumePane.zellijTempDir, { force: true, recursive: true }).catch(() => {}), 10_000);
     }
 
     // Fire-and-forget: return immediately

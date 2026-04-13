@@ -43,20 +43,20 @@ describe("Ephemeral pane lifecycle", () => {
         ["closePane"],
       );
 
-      let capturedEnv;
+      let capturedArgs;
       const result = closePane({
         backend: "zellij",
         paneId: "pane:42",
         services: {
           spawnSync: (cmd, args, opts) => {
-            capturedEnv = opts?.env;
+            capturedArgs = args;
             return { status: 0 };
           },
         },
       });
 
       assert.equal(result.ok, true);
-      assert.equal(capturedEnv.ZELLIJ_PANE_ID, "42");
+      assert.deepStrictEqual(capturedArgs, ["action", "close-pane", "--pane-id", "42"]);
     });
 
     it("GIVEN pane already dead WHEN closePane called THEN returns ok with alreadyClosed", async () => {

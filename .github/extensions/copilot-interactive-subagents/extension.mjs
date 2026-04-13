@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, constants as fsConstants, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, constants as fsConstants, mkdtemp, readFile, rm } from "node:fs/promises";
 import { mkdirSync as defaultMkdirSync, writeFileSync as defaultWriteFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -765,20 +765,6 @@ function getPaneTarget(_backend, paneId) {
   return paneId;
 }
 
-function withZellijPaneRequest(request = {}, paneId) {
-  if (!paneId) {
-    return request;
-  }
-
-  return {
-    ...request,
-    env: {
-      ...(request.env ?? {}),
-      ZELLIJ_PANE_ID: zellijPaneId(paneId),
-    },
-  };
-}
-
 function withoutZellijPaneRequest(request = {}) {
   return {
     ...request,
@@ -789,12 +775,10 @@ function withoutZellijPaneRequest(request = {}) {
   };
 }
 
-function getPaneCaptureArgs(backend, paneId, outputPath) {
+function getPaneCaptureArgs(backend, paneId) {
   switch (backend) {
     case "tmux":
       return ["capture-pane", "-p", "-t", paneId, "-S", "-200"];
-    case "zellij":
-      return ["action", "dump-screen", outputPath];
     default:
       throw createRuntimeUnavailableError("readPaneOutput", backend);
   }
@@ -899,22 +883,9 @@ async function defaultOpenPane({ backend, request, runtimeServices = {}, ...cont
       "copilot-subagents-zellij-pane",
       "pane-id.txt",
     );
-    const commandFilePath = path.join(directoryPath, "command.sh");
-    const commandReadyPath = path.join(directoryPath, "command-ready");
-    const exitFilePath = path.join(directoryPath, "exit-code");
     try {
       const direction = context.layout?.orientation === "horizontal" ? "down" : "right";
-      const timeoutSecs = 120;
-      const captureScript = [
-        `echo "$ZELLIJ_PANE_ID" > ${shellEscape(paneIdPath)}`,
-        `CMDFILE=${shellEscape(commandFilePath)}`,
-        `READY=${shellEscape(commandReadyPath)}`,
-        `EXITF=${shellEscape(exitFilePath)}`,
-        `WAITED=0`,
-        `while [ ! -f "$READY" ]; do sleep 0.2; WAITED=$((WAITED+1)); if [ "$WAITED" -ge ${timeoutSecs * 5} ]; then echo "subagent: timed out waiting for command"; exit 1; fi; done`,
-        `bash "$CMDFILE"`,
-        `echo $? > "$EXITF"`,
-      ].join(" && ");
+      const captureScript = `echo "$ZELLIJ_PANE_ID" > ${shellEscape(paneIdPath)} && exec bash`;
       await runDefaultBackendCommand({
         request: withoutZellijPaneRequest(request),
         runtimeServices,
@@ -929,15 +900,7 @@ async function defaultOpenPane({ backend, request, runtimeServices = {}, ...cont
       await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
       throw error;
     }
-    // Don't clean up directoryPath yet — launchAgentInPane needs commandFilePath
-    return {
-      paneId,
-      visible: true,
-      zellijCommandFile: commandFilePath,
-      zellijCommandReady: commandReadyPath,
-      zellijExitFile: exitFilePath,
-      zellijTempDir: directoryPath,
-    };
+    await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
   }
 
   if (!paneId) {
@@ -988,28 +951,18 @@ async function defaultLaunchAgentInPane({ backend, request, runtimeServices = {}
         sessionId: request.sessionId ?? null,
       };
     case "zellij":
-      if (context.zellijCommandFile) {
-        const commandContent = command + "\n";
-        const stagingPath = context.zellijCommandFile + ".tmp";
-        await writeFile(stagingPath, commandContent, { mode: 0o600 });
-        await rename(stagingPath, context.zellijCommandFile);
-        await writeFile(context.zellijCommandReady, "ready\n", { mode: 0o600 });
-        // Temp dir cleanup is managed by the caller (runChildLaunch) since
-        // the exit-code file in the same dir is needed for monitoring.
-      } else {
-        await runDefaultBackendCommand({
-          request: withZellijPaneRequest(request, context.paneId),
-          runtimeServices,
-          backend,
-          args: ["action", "write-chars", command],
-        });
-        await runDefaultBackendCommand({
-          request: withZellijPaneRequest(request, context.paneId),
-          runtimeServices,
-          backend,
-          args: ["action", "write", "13"],
-        });
-      }
+      await runDefaultBackendCommand({
+        request: withoutZellijPaneRequest(request),
+        runtimeServices,
+        backend,
+        args: ["action", "write-chars", "--pane-id", zellijPaneId(context.paneId), command],
+      });
+      await runDefaultBackendCommand({
+        request: withoutZellijPaneRequest(request),
+        runtimeServices,
+        backend,
+        args: ["action", "write", "--pane-id", zellijPaneId(context.paneId), "13"],
+      });
       return {
         sessionId: request.sessionId ?? null,
       };
@@ -1030,37 +983,14 @@ async function defaultReadPaneOutput({ backend, request, runtimeServices = {}, .
   }
 
   if (backend === "zellij") {
-    // File-based completion: capture script writes exit code to a file
-    // after copilot finishes. This avoids dump-screen which can't target
-    // specific panes in zellij.
-    if (context.zellijExitFile) {
-      try {
-        const exitCodeStr = await readFile(context.zellijExitFile, "utf8");
-        const exitCode = parseInt(exitCodeStr.trim(), 10);
-        return { output: `__SUBAGENT_DONE_${isNaN(exitCode) ? 1 : exitCode}__` };
-      } catch {
-        return { output: "" }; // Exit file not yet written — still running
-      }
-    }
-    // Fallback: dump-screen (unreliable for pane targeting, kept for
-    // custom openPane implementations that don't use command-file IPC)
-    const { directoryPath, filePath: outputPath } = await createPrivateTempFile(
-      "copilot-subagents-zellij-screen",
-      "screen.txt",
-    );
-    const args = getPaneCaptureArgs(backend, context.paneId, outputPath);
-    try {
-      await runDefaultBackendCommand({
-        request: withZellijPaneRequest(request, context.paneId),
-        runtimeServices,
-        backend,
-        args,
-      });
-      const output = await readFile(outputPath, "utf8");
-      return { output };
-    } finally {
-      await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
-    }
+    const args = ["action", "dump-screen", "--pane-id", zellijPaneId(context.paneId), "-f"];
+    const result = await runDefaultBackendCommand({
+      request: withoutZellijPaneRequest(request),
+      runtimeServices,
+      backend,
+      args,
+    });
+    return { output: result?.output ?? result?.stdout ?? "" };
   }
 
   return runDefaultBackendCommand({

@@ -19,8 +19,7 @@ export function closePane({ backend, paneId, services = {} } = {}) {
   }
   if (backend === "zellij") {
     const numericId = String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
-    const env = { ...process.env, ZELLIJ_PANE_ID: numericId };
-    return interpretResult(spawnSync("zellij", ["action", "close-pane"], { stdio: "pipe", env }), "zellij close-pane");
+    return interpretResult(spawnSync("zellij", ["action", "close-pane", "--pane-id", numericId], { stdio: "pipe" }), "zellij close-pane");
   }
 
   const error = new Error(`closePane: unsupported backend "${backend}"`);

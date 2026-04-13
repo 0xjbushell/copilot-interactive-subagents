@@ -278,11 +278,9 @@ export function probeSessionLiveness({ backend, paneId, services = {} } = {}) {
     return result.status === 0;
   }
   if (backend === "zellij") {
-    // Zellij doesn't support pane-targeted liveness checks (dump-screen
-    // targets the focused pane, not a specific pane). Return false (assume
-    // dead) so resume can proceed — if the pane is actually alive, a new
-    // pane opens alongside it which is harmless.
-    return false;
+    const numericId = String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
+    const result = spawnSync("zellij", ["action", "dump-screen", "--pane-id", numericId], { stdio: "pipe" });
+    return result.status === 0;
   }
   return false;
 }

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
 
 import {
   METADATA_VERSION,
@@ -227,25 +226,6 @@ async function openPaneAndPersist({ plan, request, openPane, stateStore, stateIn
   };
 }
 
-function buildZellijPaneProps(paneContext) {
-  if (!paneContext?.zellijCommandFile) return {};
-  return {
-    zellijCommandFile: paneContext.zellijCommandFile,
-    zellijCommandReady: paneContext.zellijCommandReady,
-    zellijTempDir: paneContext.zellijTempDir,
-  };
-}
-
-function createZellijCleanup(paneContext) {
-  if (!paneContext?.zellijTempDir) return null;
-  return () => rm(paneContext.zellijTempDir, { force: true, recursive: true }).catch(() => {});
-}
-
-function wrapReadPaneOutputForZellij(readPaneOutput, paneContext) {
-  if (!paneContext?.zellijExitFile) return readPaneOutput;
-  return (ctx) => readPaneOutput({ ...ctx, zellijExitFile: paneContext.zellijExitFile });
-}
-
 function enrichCompletionSummary(completion, plan) {
   if (plan.copilotSessionId) {
     const sessionSummary = extractSessionSummary({
@@ -282,10 +262,7 @@ async function runChildLaunch({
     launchId: plan.launchId,
     interactive: plan.interactive,
     request,
-    ...buildZellijPaneProps(paneContext),
   });
-
-  const zellijCleanup = createZellijCleanup(paneContext);
 
   const activeStatus = plan.interactive ? "interactive" : "running";
   const activeManifest = await stateStore.updateLaunchRecord(plan.launchId, {
@@ -299,7 +276,6 @@ async function runChildLaunch({
   });
 
   if (!plan.awaitCompletion) {
-    if (zellijCleanup) setTimeout(zellijCleanup, 10_000);
     return shapeLaunchResult({
       manifest: activeManifest,
       request,
@@ -309,22 +285,18 @@ async function runChildLaunch({
     });
   }
 
-  const monitorReadPaneOutput = wrapReadPaneOutputForZellij(readPaneOutput, paneContext);
-
   const completion = await waitForLaunchCompletion({
     backend: plan.backend,
     paneId: activeManifest.paneId,
     sessionId: activeManifest.sessionId,
     agentIdentifier: plan.agentIdentifier,
-    readPaneOutput: monitorReadPaneOutput,
+    readPaneOutput,
     readChildSessionState,
     maxAttempts: request.maxMonitorAttempts ?? DEFAULT_MONITOR_ATTEMPTS,
     pollIntervalMs: request.pollIntervalMs ?? 500,
     sleep: request.sleep,
     request,
   });
-
-  if (zellijCleanup) await zellijCleanup();
 
   const completionWithSummary = enrichCompletionSummary(completion, plan);
 
