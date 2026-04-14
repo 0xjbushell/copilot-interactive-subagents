@@ -23,6 +23,15 @@ First public release.
 - **Session locks** — prevent concurrent resume of the same session
 - **Atomic state** — manifests written via temp+rename for crash safety
 
+### 📐 Architecture
+
+- Modular codebase: 19 focused modules in `lib/` (avg ~150 lines each)
+- Extension entry point reduced to ~520 lines (orchestration + DI wiring only)
+- Dependency-injected services for full testability
+- Shared utilities extracted to `utils.mjs` (normalizers, status helpers, pane ID parsing)
+- Pure-data tool schemas separated from business logic (`tool-schemas.mjs`)
+- Request validation isolated in dedicated module (`validation.mjs`)
+
 ### 🏗️ Infrastructure
 
 - Unit tests (152 tests, node:test runner)
