@@ -10,6 +10,7 @@ import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
 import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
 import { forkSession as defaultForkSession } from "./fork-session.mjs";
+import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
 
 const DEFAULT_MONITOR_ATTEMPTS = 240;
 
@@ -19,45 +20,6 @@ function normalizeExitCode(value, fallback = 1) {
   }
 
   return Number.isInteger(value) ? value : Number.parseInt(value, 10);
-}
-
-function resolveStateStore({ request, services = {} }) {
-  if (request.stateStore) {
-    return request.stateStore;
-  }
-
-  if (services.stateStore) {
-    return services.stateStore;
-  }
-
-  const createStateStore = request.createStateStore ?? services.createStateStore ?? defaultCreateStateStore;
-  return createStateStore({
-    workspacePath: request.workspacePath,
-    projectRoot: request.projectRoot,
-  });
-}
-
-function resolveOperation({ request, services = {}, name }) {
-  return request[name] ?? services[name];
-}
-
-function resolveStateIndex({ request, services = {} }) {
-  if (request.stateIndex) {
-    return request.stateIndex;
-  }
-
-  if (services.stateIndex) {
-    return services.stateIndex;
-  }
-
-  if (!request.projectRoot && !request.createStateIndex && !services.createStateIndex) {
-    return null;
-  }
-
-  const createStateIndex = request.createStateIndex ?? services.createStateIndex ?? defaultCreateStateIndex;
-  return createStateIndex({
-    projectRoot: request.projectRoot,
-  });
 }
 
 function createPrelaunchFailure({

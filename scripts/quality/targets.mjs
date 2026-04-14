@@ -7,10 +7,12 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/resolve.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/session-lock.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/titles.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/utils.mjs",
   ".github/extensions/copilot-interactive-subagents/extension.mjs",
 ];
 

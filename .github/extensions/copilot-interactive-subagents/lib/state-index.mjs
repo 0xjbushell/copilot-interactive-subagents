@@ -2,19 +2,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { METADATA_VERSION, createLaunchRecord } from "./state.mjs";
+import { normalizeOptionalText } from "./utils.mjs";
 
 export const STATE_INDEX_VERSION = 1;
 
 const DEFAULT_INDEX_PATH = path.join(".copilot-interactive-subagents", "launch-index.json");
-
-function normalizeOptionalText(value) {
-  if (typeof value !== "string") {
-    return value ?? null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function resolveIndexPath({ projectRoot = process.cwd(), indexPath = DEFAULT_INDEX_PATH } = {}) {
   return path.resolve(projectRoot, indexPath);

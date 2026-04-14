@@ -1,19 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { normalizeOptionalText } from "./utils.mjs";
+
 export const METADATA_VERSION = 2;
 export const LAUNCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
 const DEFAULT_STORE_DIRECTORY = path.join(".copilot-interactive-subagents", "launches");
-
-function normalizeOptionalText(value) {
-  if (typeof value !== "string") {
-    return value ?? null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function normalizeExitCode(value) {
   if (value === null || value === undefined) {

@@ -1,10 +1,4 @@
-function uniqueSorted(values = []) {
-  return [...new Set(values.filter(Boolean))].sort();
-}
-
-function uniqueStable(values = []) {
-  return [...new Set(values.filter(Boolean))];
-}
+import { uniqueStable, uniqueSorted } from "./utils.mjs";
 
 const DEFAULT_ENUMERATE_TIMEOUT_MS = 500;
 

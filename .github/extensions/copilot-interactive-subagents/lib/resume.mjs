@@ -13,10 +13,7 @@ import { closePane as defaultClosePane } from "./close-pane.mjs";
 import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
-
-function resolveOperation({ request, services = {}, name }) {
-  return request[name] ?? services[name];
-}
+import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
 
 function resolveLaunchId(request = {}) {
   if (typeof request.launchId === "string" && request.launchId.trim().length > 0) {
@@ -28,41 +25,6 @@ function resolveLaunchId(request = {}) {
   }
 
   return request.resumePointer?.launchId ?? request.resumeReference?.launchId ?? null;
-}
-
-function resolveStateStore({ request = {}, services = {} }) {
-  if (request.stateStore) {
-    return request.stateStore;
-  }
-
-  if (services.stateStore) {
-    return services.stateStore;
-  }
-
-  const createStateStore = request.createStateStore ?? services.createStateStore ?? defaultCreateStateStore;
-  return createStateStore({
-    workspacePath: request.workspacePath,
-    projectRoot: request.projectRoot,
-  });
-}
-
-function resolveStateIndex({ request = {}, services = {} }) {
-  if (request.stateIndex) {
-    return request.stateIndex;
-  }
-
-  if (services.stateIndex) {
-    return services.stateIndex;
-  }
-
-  if (!request.projectRoot && !request.createStateIndex && !services.createStateIndex) {
-    return null;
-  }
-
-  const createStateIndex = request.createStateIndex ?? services.createStateIndex ?? defaultCreateStateIndex;
-  return createStateIndex({
-    projectRoot: request.projectRoot,
-  });
 }
 
 function shapeResumeFailure({

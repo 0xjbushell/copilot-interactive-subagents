@@ -23,6 +23,7 @@ import {
 } from "./lib/state.mjs";
 import { createStateIndex as buildDefaultStateIndex } from "./lib/state-index.mjs";
 import { setSubagentTitle as defaultContinueSetTitle } from "./lib/titles.mjs";
+import { normalizeNonEmptyString, uniqueStable } from "./lib/utils.mjs";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];
@@ -252,19 +253,6 @@ const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_set_title: "copilotSubagentSetTitle",
 };
 
-function normalizeNonEmptyString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function uniqueStable(values = []) {
-  return [...new Set(values.filter(Boolean))];
-}
-
 function shellEscape(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
@@ -399,14 +387,6 @@ async function resolveCommandPath(commandName, env = process.env) {
   return null;
 }
 
-async function hasCommandInPath(commandName, env = process.env) {
-  if (await resolveCommandPath(commandName, env)) {
-    return true;
-  }
-
-  return false;
-}
-
 function buildBackendRequest(request = {}, services = {}) {
   const trustedRequest = buildTrustedRequest(request, services);
   const runtimeSupport = supportedRuntimeBackends(trustedRequest);
@@ -443,36 +423,23 @@ function createArgumentFailure({
   };
 }
 
+const AGENT_VALIDATION_GUIDANCE = {
+  AGENT_NOT_FOUND:
+    "Provide the exact runtime-recognized agent identifier. Use copilot_subagent_list_agents to discover valid names.",
+  AGENT_VALIDATION_UNAVAILABLE:
+    "Retry agent discovery or target an explicitly allowed built-in identifier if your workflow already knows it.",
+  AGENT_DISCOVERY_UNAVAILABLE:
+    "Agent discovery is temporarily unavailable. Retry discovery or target an explicitly allowed built-in identifier.",
+};
+
 function addAgentValidationGuidance(result = {}, field) {
   if (result.ok !== false) {
     return result;
   }
 
-  if (result.code === "AGENT_NOT_FOUND") {
-    return {
-      ...result,
-      ...(field ? { field } : {}),
-      guidance:
-        "Provide the exact runtime-recognized agent identifier. Use copilot_subagent_list_agents to discover valid names.",
-    };
-  }
-
-  if (result.code === "AGENT_VALIDATION_UNAVAILABLE") {
-    return {
-      ...result,
-      ...(field ? { field } : {}),
-      guidance:
-        "Retry agent discovery or target an explicitly allowed built-in identifier if your workflow already knows it.",
-    };
-  }
-
-  if (result.code === "AGENT_DISCOVERY_UNAVAILABLE") {
-    return {
-      ...result,
-      ...(field ? { field } : {}),
-      guidance:
-        "Agent discovery is temporarily unavailable. Retry discovery or target an explicitly allowed built-in identifier.",
-    };
+  const guidance = AGENT_VALIDATION_GUIDANCE[result.code];
+  if (guidance) {
+    return { ...result, ...(field ? { field } : {}), guidance };
   }
 
   return result;
@@ -761,10 +728,6 @@ async function waitForFileText(filePath, {
   throw error;
 }
 
-function getPaneTarget(_backend, paneId) {
-  return paneId;
-}
-
 function withoutZellijPaneRequest(request = {}) {
   return {
     ...request,
@@ -931,7 +894,6 @@ async function defaultLaunchAgentInPane({ backend, request, runtimeServices = {}
   }
 
   const command = createDefaultAgentLaunchCommand(request, runtimeServices, context);
-  const paneTarget = getPaneTarget(backend, context.paneId);
 
   switch (backend) {
     case "tmux":
@@ -939,19 +901,19 @@ async function defaultLaunchAgentInPane({ backend, request, runtimeServices = {}
         request,
         runtimeServices,
         backend,
-        args: ["select-pane", "-t", paneTarget],
+        args: ["select-pane", "-t", context.paneId],
       });
       await runDefaultBackendCommand({
         request,
         runtimeServices,
         backend,
-        args: ["send-keys", "-t", paneTarget, "-l", command],
+        args: ["send-keys", "-t", context.paneId, "-l", command],
       });
       await runDefaultBackendCommand({
         request,
         runtimeServices,
         backend,
-        args: ["send-keys", "-t", paneTarget, "Enter"],
+        args: ["send-keys", "-t", context.paneId, "Enter"],
       });
       return {
         sessionId: request.sessionId ?? null,
@@ -1030,7 +992,7 @@ async function defaultDiscoverLaunchBackendsForRuntime(request = {}, runtimeServ
 
   return defaultDiscoverLaunchBackends({
     env,
-    hasCommand: request.hasCommand ?? (async (command) => runtimeSupport[command] && hasCommandInPath(command, env)),
+    hasCommand: request.hasCommand ?? (async (command) => runtimeSupport[command] && Boolean(await resolveCommandPath(command, env))),
     startupSupport: request.startupSupport ?? {
       ...DEFAULT_SUPPORTED_STARTUP,
       tmux: runtimeSupport.tmux,
@@ -1070,7 +1032,7 @@ async function defaultResolveLaunchBackendForRuntime(request = {}, runtimeServic
   return defaultResolveLaunchBackend({
     requestedBackend: backendRequest.requestedBackend,
     env,
-    hasCommand: request.hasCommand ?? (async (command) => runtimeSupport[command] && hasCommandInPath(command, env)),
+    hasCommand: request.hasCommand ?? (async (command) => runtimeSupport[command] && Boolean(await resolveCommandPath(command, env))),
     startupSupport: request.startupSupport ?? {
       ...DEFAULT_SUPPORTED_STARTUP,
       tmux: runtimeSupport.tmux,

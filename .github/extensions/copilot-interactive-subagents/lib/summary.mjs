@@ -13,14 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 
-function normalizeOptionalText(value) {
-  if (typeof value !== "string") {
-    return value ?? null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
+import { normalizeOptionalText } from "./utils.mjs";
 
 function detectExitSentinel(paneOutput = "") {
   const match = String(paneOutput).match(SENTINEL_PATTERN);

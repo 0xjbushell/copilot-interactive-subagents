@@ -1,16 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { normalizeNonEmptyString } from "./utils.mjs";
+
 const execFileAsync = promisify(execFile);
-
-function normalizeNonEmptyString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function createTitleFailure({ code, message, backend = null, paneId = null, guidance }) {
   return {
