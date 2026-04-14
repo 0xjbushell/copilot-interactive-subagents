@@ -1,20 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { normalizeOptionalText } from "./utils.mjs";
+import { normalizeOptionalText, normalizeExitCode } from "./utils.mjs";
 
 export const METADATA_VERSION = 2;
 export const LAUNCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
 const DEFAULT_STORE_DIRECTORY = path.join(".copilot-interactive-subagents", "launches");
-
-function normalizeExitCode(value) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return Number.isInteger(value) ? value : Number.parseInt(value, 10);
-}
 
 function resolveStoreRoot({ workspacePath, projectRoot = process.cwd(), storeDirectory = DEFAULT_STORE_DIRECTORY } = {}) {
   return path.resolve(workspacePath ?? projectRoot, storeDirectory);

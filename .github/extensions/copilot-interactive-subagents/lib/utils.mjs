@@ -40,3 +40,22 @@ export function isActiveOrSuccessful(status) {
 export function stripPanePrefix(paneId) {
   return String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
 }
+
+/** Normalizes an exit code value to an integer, returning `fallback` for null/undefined. */
+export function normalizeExitCode(value, fallback = null) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  return Number.isInteger(value) ? value : Number.parseInt(value, 10);
+}
+
+/** Counts non-empty lines in a file. Returns 0 if the file doesn't exist. */
+export function countNonEmptyLines(readFileSync, filePath) {
+  try {
+    const raw = readFileSync(filePath, "utf8");
+    return raw.split("\n").filter((l) => l.trim().length > 0).length;
+  } catch {
+    return 0;
+  }
+}

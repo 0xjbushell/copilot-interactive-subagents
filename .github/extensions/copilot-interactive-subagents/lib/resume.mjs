@@ -12,7 +12,7 @@ import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } 
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
-import { isActiveOrSuccessful, normalizeNonEmptyString } from "./utils.mjs";
+import { isActiveOrSuccessful, normalizeNonEmptyString, countNonEmptyLines } from "./utils.mjs";
 
 function resolveLaunchId(request = {}) {
   return normalizeNonEmptyString(request.launchId)
@@ -154,12 +154,7 @@ function countSessionEvents({ copilotSessionId, copilotHome, services = {} }) {
   const homedir = services.homedir ?? defaultHomedir;
   const home = copilotHome ?? join(homedir(), ".copilot");
   const eventsPath = join(home, "session-state", copilotSessionId, "events.jsonl");
-  try {
-    const raw = readFile(eventsPath, "utf8");
-    return raw.split("\n").filter((l) => l.trim().length > 0).length;
-  } catch {
-    return 0;
-  }
+  return countNonEmptyLines(readFile, eventsPath);
 }
 
 async function awaitResumeCompletion({

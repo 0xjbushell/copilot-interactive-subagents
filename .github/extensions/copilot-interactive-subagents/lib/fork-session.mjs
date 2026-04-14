@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 
 import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
+import { countNonEmptyLines } from "./utils.mjs";
 
 function resolveSessionDir({ copilotHome, copilotSessionId, services = {} }) {
   const homedir = services.homedir ?? defaultHomedir;
@@ -26,12 +27,7 @@ function updateWorkspaceYamlId({ dir, newId, services = {} }) {
 
 function countEvents({ dir, services = {} }) {
   const readFileSync = services.readFileSync ?? defaultReadFileSync;
-  try {
-    const raw = readFileSync(join(dir, "events.jsonl"), "utf8");
-    return raw.split("\n").filter((l) => l.trim().length > 0).length;
-  } catch {
-    return 0;
-  }
+  return countNonEmptyLines(readFileSync, join(dir, "events.jsonl"));
 }
 
 export function forkSession({
