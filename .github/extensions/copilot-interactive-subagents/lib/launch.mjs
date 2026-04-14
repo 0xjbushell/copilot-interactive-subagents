@@ -4,9 +4,7 @@ import {
   METADATA_VERSION,
   buildResumePointer,
   createLaunchRecord,
-  createStateStore as defaultCreateStateStore,
 } from "./state.mjs";
-import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
 import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
 import { forkSession as defaultForkSession } from "./fork-session.mjs";
@@ -364,7 +362,7 @@ export function planSingleLaunch({
     launchAction: backendResolution.action,
     backendSessionName: backendResolution.sessionName ?? null,
     task: request.task,
-    awaitCompletion: request.awaitCompletion ?? (interactive ? false : true),
+    awaitCompletion: request.awaitCompletion ?? !interactive,
     requestedAt: now(),
     sessionId: null,
     summary: null,

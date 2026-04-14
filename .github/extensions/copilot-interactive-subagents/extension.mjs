@@ -1,9 +1,4 @@
-import { execFile } from "node:child_process";
-import { access, constants as fsConstants, mkdtemp, readFile, rm } from "node:fs/promises";
-import { mkdirSync as defaultMkdirSync, writeFileSync as defaultWriteFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   listRuntimeAgents as defaultListRuntimeAgents,
@@ -24,8 +19,21 @@ import {
 import { createStateIndex as buildDefaultStateIndex } from "./lib/state-index.mjs";
 import { setSubagentTitle as defaultContinueSetTitle } from "./lib/titles.mjs";
 import { normalizeNonEmptyString, uniqueStable } from "./lib/utils.mjs";
+import {
+  resolveCommandPath,
+  createDefaultAgentLaunchCommand,
+  writeSignalFile,
+  defaultOpenPane,
+  defaultLaunchAgentInPane,
+  defaultReadPaneOutput,
+  defaultReadChildSessionState,
+  defaultAttachBackendForRuntime,
+  defaultStartBackendForRuntime,
+} from "./lib/backend-ops.mjs";
 
-const execFileAsync = promisify(execFile);
+// Re-export for backward compatibility (tests import these from extension.mjs)
+export { createDefaultAgentLaunchCommand, writeSignalFile };
+
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];
 const DEFAULT_SUPPORTED_STARTUP = {
   cmux: false,
@@ -253,14 +261,6 @@ const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_set_title: "copilotSubagentSetTitle",
 };
 
-function shellEscape(value) {
-  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
-}
-
-function encodeBase64(value) {
-  return Buffer.from(String(value ?? ""), "utf8").toString("base64");
-}
-
 function resolveServiceValue(valueOrFactory) {
   return typeof valueOrFactory === "function" ? valueOrFactory() : valueOrFactory;
 }
@@ -278,18 +278,19 @@ function buildTrustedRequest(request = {}, services = {}) {
   const trustedWorkspacePath = sessionWorkspacePath ?? request.workspacePath;
   const trustedProjectRoot = resolveServiceValue(services.projectRoot) ?? request.projectRoot ?? process.cwd();
 
-  return {
+  const trusted = {
     ...request,
     ...(trustedWorkspacePath ? { workspacePath: trustedWorkspacePath } : {}),
     projectRoot: trustedProjectRoot,
     cwd: request.cwd ?? resolveServiceValue(services.cwd) ?? trustedProjectRoot,
     builtInIdentifiers: mergeBuiltInIdentifiers(request, services),
-    ...(request.enumerateCustomAgents
-      ? {}
-      : typeof services.enumerateCustomAgents === "function"
-        ? { enumerateCustomAgents: services.enumerateCustomAgents }
-        : {}),
   };
+
+  if (!request.enumerateCustomAgents && typeof services.enumerateCustomAgents === "function") {
+    trusted.enumerateCustomAgents = services.enumerateCustomAgents;
+  }
+
+  return trusted;
 }
 
 function runtimeHasAdapter(request = {}, backend, operation) {
@@ -338,53 +339,6 @@ function sanitizeBackendEnvironment(env = {}, runtimeSupport = {}) {
   }
 
   return sanitized;
-}
-
-function listCommandSearchPaths(env = process.env) {
-  const directories = new Set();
-  const pathValue = env.PATH;
-
-  if (typeof pathValue === "string") {
-    for (const directory of pathValue.split(path.delimiter)) {
-      if (directory) {
-        directories.add(directory);
-      }
-    }
-  }
-
-  const userName = env.USER ?? env.LOGNAME ?? null;
-  if (userName) {
-    directories.add(path.join("/etc/profiles/per-user", userName, "bin"));
-  }
-
-  directories.add("/run/current-system/sw/bin");
-  directories.add("/usr/local/bin");
-  directories.add("/usr/bin");
-  directories.add("/bin");
-
-  return [...directories];
-}
-
-async function resolveCommandPath(commandName, env = process.env) {
-  if (path.isAbsolute(commandName)) {
-    try {
-      await access(commandName, fsConstants.X_OK);
-      return commandName;
-    } catch {
-      return null;
-    }
-  }
-
-  for (const directory of listCommandSearchPaths(env)) {
-    const candidate = path.join(directory, commandName);
-
-    try {
-      await access(candidate, fsConstants.X_OK);
-      return candidate;
-    } catch {}
-  }
-
-  return null;
 }
 
 function buildBackendRequest(request = {}, services = {}) {
@@ -636,356 +590,6 @@ function defaultCreateStateIndex(request = {}) {
   });
 }
 
-function createRuntimeUnavailableError(operation, backend) {
-  const error = new Error(
-    `Launch runtime operation ${operation} is not configured for backend ${backend}.`,
-  );
-  error.code = "LAUNCH_RUNTIME_UNAVAILABLE";
-  return error;
-}
-
-function resolveLaunchRuntimeOperation(request = {}, _runtimeServices = {}, backend, operation) {
-  const runtime = request.launchRuntime ?? {};
-
-  if (typeof runtime[operation] === "function") {
-    return runtime[operation];
-  }
-
-  if (typeof runtime?.backends?.[backend]?.[operation] === "function") {
-    return runtime.backends[backend][operation];
-  }
-
-  return null;
-}
-
-async function runDefaultBackendCommand({ request, runtimeServices = {}, backend, args }) {
-  const runner = request.runBackendCommand ?? runtimeServices.runBackendCommand;
-  const env = {
-    ...process.env,
-    ...(request.env ?? {}),
-  };
-  for (const key of Object.keys(env)) {
-    if (env[key] == null) {
-      delete env[key];
-    }
-  }
-  const cwd = request.cwd ?? process.cwd();
-  if (typeof runner === "function") {
-    return runner({ command: backend, args, cwd, env, request });
-  }
-
-  const command = (await resolveCommandPath(backend, env)) ?? backend;
-  const { stdout = "", stderr = "" } = await execFileAsync(command, args, {
-    cwd,
-    env,
-    encoding: "utf8",
-    maxBuffer: 1024 * 1024,
-  });
-
-  return { stdout, stderr };
-}
-
-function defaultTmuxSessionName(request = {}) {
-  const suffix = path.basename(request.projectRoot ?? process.cwd()).replace(/[^A-Za-z0-9_-]+/g, "-");
-  return `copilot-subagents-${suffix || "session"}`.slice(0, 64);
-}
-
-function zellijPaneId(paneId) {
-  return String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
-}
-
-async function createPrivateTempFile(prefix, fileName) {
-  const directoryPath = await mkdtemp(path.join(tmpdir(), `${prefix}-`));
-  return {
-    directoryPath,
-    filePath: path.join(directoryPath, fileName),
-  };
-}
-
-async function waitForFileText(filePath, {
-  timeoutMs = 5000,
-  intervalMs = 25,
-} = {}) {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const text = await readFile(filePath, "utf8");
-      if (text.trim()) {
-        return text;
-      }
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        throw error;
-      }
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-
-  const error = new Error(`Timed out waiting for zellij pane metadata at ${filePath}.`);
-  error.code = "LAUNCH_RUNTIME_UNAVAILABLE";
-  throw error;
-}
-
-function withoutZellijPaneRequest(request = {}) {
-  return {
-    ...request,
-    env: {
-      ...(request.env ?? {}),
-      ZELLIJ_PANE_ID: null,
-    },
-  };
-}
-
-function getPaneCaptureArgs(backend, paneId) {
-  switch (backend) {
-    case "tmux":
-      return ["capture-pane", "-p", "-t", paneId, "-S", "-200"];
-    default:
-      throw createRuntimeUnavailableError("readPaneOutput", backend);
-  }
-}
-
-function buildOpenPaneArgs(backend, context = {}) {
-  const orientation = context.layout?.orientation;
-  switch (backend) {
-    case "tmux":
-      return [
-        "split-window",
-        // -h = horizontal split (pane appears right), -v = vertical (pane appears below)
-        orientation === "horizontal" ? "-v" : "-h",
-        ...(context.launchAction === "start" && context.backendSessionName ? ["-t", context.backendSessionName] : []),
-        "-P",
-        "-F",
-        "#{pane_id}",
-      ];
-    case "zellij":
-      return [
-        "action",
-        "new-pane",
-        "--direction",
-        orientation === "horizontal" ? "down" : "right",
-        "--name",
-        context.agentIdentifier ?? "copilot-subagent",
-        "--",
-        "bash",
-      ];
-    default:
-      throw createRuntimeUnavailableError("openPane", backend);
-  }
-}
-
-function extractPaneId(stdout = "") {
-  const paneId = String(stdout).trim().split(/\r?\n/).filter(Boolean).at(-1);
-  if (!paneId) return null;
-  // Normalize zellij's "terminal_N" format to our internal "pane:N"
-  const zellijMatch = paneId.match(/^terminal_(\d+)$/);
-  if (zellijMatch) return `pane:${zellijMatch[1]}`;
-  return paneId;
-}
-
-export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task, copilotSessionId, interactive, backend }) {
-  const createAgentLaunchCommand =
-    request.createAgentLaunchCommand ?? runtimeServices.createAgentLaunchCommand;
-  if (typeof createAgentLaunchCommand === "function") {
-    return createAgentLaunchCommand({ agentIdentifier, task, copilotSessionId, interactive, backend });
-  }
-
-  const copilotBinary = request.copilotBinary ?? runtimeServices.copilotBinary ?? "copilot";
-  const agentIdentifierB64 = encodeBase64(agentIdentifier);
-  const taskB64 = encodeBase64(task ?? "");
-  const useDefaultCopilotAgent = agentIdentifier === "github-copilot";
-  const promptFlag = interactive ? "-i" : "-p";
-  const suppressStats = interactive ? "" : ' "-s",';
-  const resumeFlag = copilotSessionId ? `"--resume=${copilotSessionId}",` : "";
-  const runnerScript = [
-    'const { spawnSync } = require("node:child_process");',
-    'const decode = (name) => Buffer.from(process.env[name] || "", "base64").toString("utf8");',
-    useDefaultCopilotAgent
-      ? `const args = [${resumeFlag} "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${suppressStats}];`
-      : `const args = [${resumeFlag} "--agent", decode("COPILOT_SUBAGENT_AGENT_B64"), "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${suppressStats}];`,
-    `const result = spawnSync(${JSON.stringify(copilotBinary)}, args, { stdio: "inherit" });`,
-    'const code = Number.isInteger(result.status) ? result.status : 1;',
-    'process.stdout.write("\\n__SUBAGENT_DONE_" + code + "__\\n");',
-    'process.exit(code);',
-  ].join("");
-
-  const envParts = [
-    `COPILOT_SUBAGENT_AGENT_B64=${shellEscape(agentIdentifierB64)}`,
-    `COPILOT_SUBAGENT_TASK_B64=${shellEscape(taskB64)}`,
-  ];
-  if (copilotSessionId) {
-    envParts.push(`COPILOT_SUBAGENT_SESSION_ID=${shellEscape(copilotSessionId)}`);
-  }
-  if (request.launchId) {
-    envParts.push(`COPILOT_SUBAGENT_LAUNCH_ID=${shellEscape(request.launchId)}`);
-  }
-  return [...envParts, `node -e ${shellEscape(runnerScript)}`].join(" ");
-}
-
-export function writeSignalFile({ copilotSessionId, launchId, stateDir, services = {} } = {}) {
-  const mkdirSync = services.mkdirSync ?? defaultMkdirSync;
-  const writeFileSync = services.writeFileSync ?? defaultWriteFileSync;
-  const now = services.now ?? Date.now;
-  const baseDir = stateDir ?? ".copilot-interactive-subagents";
-  const signalDir = path.join(baseDir, "done");
-  mkdirSync(signalDir, { recursive: true });
-  writeFileSync(path.join(signalDir, copilotSessionId), `${now()}|${launchId ?? "unknown"}`);
-}
-
-async function defaultOpenPane({ backend, request, runtimeServices = {}, ...context }) {
-  const openPane = resolveLaunchRuntimeOperation(request, runtimeServices, backend, "openPane");
-  if (openPane) {
-    return openPane({ backend, request, ...context });
-  }
-
-  const result = await runDefaultBackendCommand({
-    request,
-    runtimeServices,
-    backend,
-    args: buildOpenPaneArgs(backend, context),
-  });
-  let paneId = extractPaneId(result?.stdout);
-  if (backend === "zellij" && (!paneId || !/^pane:\d+$/.test(paneId))) {
-    const { directoryPath, filePath: paneIdPath } = await createPrivateTempFile(
-      "copilot-subagents-zellij-pane",
-      "pane-id.txt",
-    );
-    try {
-      const direction = context.layout?.orientation === "horizontal" ? "down" : "right";
-      const captureScript = `echo "$ZELLIJ_PANE_ID" > ${shellEscape(paneIdPath)} && exec bash`;
-      await runDefaultBackendCommand({
-        request: withoutZellijPaneRequest(request),
-        runtimeServices,
-        backend,
-        args: ["run", "--direction", direction, "--name", context.agentIdentifier ?? "copilot-subagent", "--", "bash", "-c", captureScript],
-      });
-      const capturedPaneId = (await waitForFileText(paneIdPath)).trim();
-      if (capturedPaneId) {
-        paneId = `pane:${capturedPaneId}`;
-      }
-    } catch (error) {
-      await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
-      throw error;
-    }
-    await rm(directoryPath, { force: true, recursive: true }).catch(() => {});
-  }
-
-  if (!paneId) {
-    throw createRuntimeUnavailableError("openPane", backend);
-  }
-
-  return {
-    paneId,
-    visible: true,
-  };
-}
-
-async function defaultLaunchAgentInPane({ backend, request, runtimeServices = {}, ...context }) {
-  const launchAgentInPane = resolveLaunchRuntimeOperation(
-    request,
-    runtimeServices,
-    backend,
-    "launchAgentInPane",
-  );
-  if (launchAgentInPane) {
-    return launchAgentInPane({ backend, request, ...context });
-  }
-
-  const command = createDefaultAgentLaunchCommand(request, runtimeServices, context);
-
-  switch (backend) {
-    case "tmux":
-      await runDefaultBackendCommand({
-        request,
-        runtimeServices,
-        backend,
-        args: ["select-pane", "-t", context.paneId],
-      });
-      await runDefaultBackendCommand({
-        request,
-        runtimeServices,
-        backend,
-        args: ["send-keys", "-t", context.paneId, "-l", command],
-      });
-      await runDefaultBackendCommand({
-        request,
-        runtimeServices,
-        backend,
-        args: ["send-keys", "-t", context.paneId, "Enter"],
-      });
-      return {
-        sessionId: request.sessionId ?? null,
-      };
-    case "zellij":
-      await runDefaultBackendCommand({
-        request: withoutZellijPaneRequest(request),
-        runtimeServices,
-        backend,
-        args: ["action", "write-chars", "--pane-id", zellijPaneId(context.paneId), command],
-      });
-      await runDefaultBackendCommand({
-        request: withoutZellijPaneRequest(request),
-        runtimeServices,
-        backend,
-        args: ["action", "write", "--pane-id", zellijPaneId(context.paneId), "13"],
-      });
-      return {
-        sessionId: request.sessionId ?? null,
-      };
-    default:
-      throw createRuntimeUnavailableError("launchAgentInPane", backend);
-  }
-}
-
-async function defaultReadPaneOutput({ backend, request, runtimeServices = {}, ...context }) {
-  const readPaneOutput = resolveLaunchRuntimeOperation(
-    request,
-    runtimeServices,
-    backend,
-    "readPaneOutput",
-  );
-  if (readPaneOutput) {
-    return readPaneOutput({ backend, request, ...context });
-  }
-
-  if (backend === "zellij") {
-    const args = ["action", "dump-screen", "--pane-id", zellijPaneId(context.paneId), "-f"];
-    const result = await runDefaultBackendCommand({
-      request: withoutZellijPaneRequest(request),
-      runtimeServices,
-      backend,
-      args,
-    });
-    return { output: result?.output ?? result?.stdout ?? "" };
-  }
-
-  return runDefaultBackendCommand({
-    request,
-    runtimeServices,
-    backend,
-    args: getPaneCaptureArgs(backend, context.paneId),
-  }).then((result) => ({
-    ...result,
-    output: result?.output ?? result?.stdout ?? "",
-  }));
-}
-
-async function defaultReadChildSessionState({ backend, request, runtimeServices = {}, ...context }) {
-  const readChildSessionState = resolveLaunchRuntimeOperation(
-    request,
-    runtimeServices,
-    backend,
-    "readChildSessionState",
-  );
-  if (!readChildSessionState) {
-    return null;
-  }
-
-  return readChildSessionState({ backend, request, ...context });
-}
-
 async function defaultDiscoverLaunchBackendsForRuntime(request = {}, runtimeServices = {}) {
   const backendRequest = buildBackendRequest(request, runtimeServices);
   const { runtimeSupport, env } = backendRequest;
@@ -998,31 +602,6 @@ async function defaultDiscoverLaunchBackendsForRuntime(request = {}, runtimeServ
       tmux: runtimeSupport.tmux,
     },
   });
-}
-
-async function defaultAttachBackendForRuntime(backend) {
-  switch (backend) {
-    case "tmux":
-    case "zellij":
-      return {};
-    default:
-      throw createRuntimeUnavailableError("attach", backend);
-  }
-}
-
-async function defaultStartBackendForRuntime(backend, request, runtimeServices = {}) {
-  if (backend !== "tmux") {
-    throw createRuntimeUnavailableError("start", backend);
-  }
-
-  const sessionName = request.tmuxSessionName ?? runtimeServices.tmuxSessionName ?? defaultTmuxSessionName(request);
-  await runDefaultBackendCommand({
-    request,
-    runtimeServices,
-    backend,
-    args: ["new-session", "-A", "-d", "-s", sessionName],
-  });
-  return { sessionName };
 }
 
 async function defaultResolveLaunchBackendForRuntime(request = {}, runtimeServices = {}) {

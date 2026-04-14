@@ -1,3 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir as defaultHomedir } from "node:os";
+
+import { normalizeOptionalText } from "./utils.mjs";
+
 const SENTINEL_PATTERN = /__SUBAGENT_DONE_(-?\d+)__/;
 const DEFAULT_POLL_INTERVAL_MS = 500;
 const FALLBACK_STATE_TEXT = {
@@ -8,12 +14,6 @@ const FALLBACK_STATE_TEXT = {
   running: "is running",
   interactive: "is running interactively",
 };
-
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir as defaultHomedir } from "node:os";
-
-import { normalizeOptionalText } from "./utils.mjs";
 
 function detectExitSentinel(paneOutput = "") {
   const match = String(paneOutput).match(SENTINEL_PATTERN);

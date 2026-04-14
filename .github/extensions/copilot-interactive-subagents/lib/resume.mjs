@@ -1,11 +1,9 @@
 import {
   METADATA_VERSION,
   buildResumePointer,
-  createStateStore as defaultCreateStateStore,
   isValidLaunchId,
   isSupportedBackend,
 } from "./state.mjs";
-import { createStateIndex as defaultCreateStateIndex } from "./state-index.mjs";
 import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
 import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
 import { probeSessionLiveness as defaultProbeSessionLiveness } from "./mux.mjs";

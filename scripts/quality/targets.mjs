@@ -1,5 +1,6 @@
 const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/backend-ops.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/fork-session.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
@@ -119,7 +120,7 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "launch-await-completion-default",
     file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
-    from: "awaitCompletion: request.awaitCompletion ?? (interactive ? false : true),",
+    from: "awaitCompletion: request.awaitCompletion ?? !interactive,",
     to: "awaitCompletion: false,",
   },
   {
