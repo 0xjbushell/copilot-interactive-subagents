@@ -1,5 +1,9 @@
 # copilot-interactive-subagents
 
+[![CI](https://github.com/0xjbushell/copilot-interactive-subagents/actions/workflows/ci.yml/badge.svg)](https://github.com/0xjbushell/copilot-interactive-subagents/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
+
 `copilot-interactive-subagents` is a GitHub Copilot CLI extension that launches Copilot subagents into visible terminal multiplexer panes and keeps enough state to monitor, resume, and report on those runs later.
 
 The design goal is simple:

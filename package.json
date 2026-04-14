@@ -1,7 +1,32 @@
 {
   "name": "copilot-interactive-subagents",
   "private": true,
+  "version": "1.0.0",
   "type": "module",
+  "description": "GitHub Copilot CLI extension that launches subagents into visible tmux/zellij panes with persistent state, resume, fork, and parallel orchestration",
+  "keywords": [
+    "copilot",
+    "cli",
+    "extension",
+    "agents",
+    "subagents",
+    "tmux",
+    "zellij",
+    "orchestration"
+  ],
+  "author": "James Bushell",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0xjbushell/copilot-interactive-subagents.git"
+  },
+  "homepage": "https://github.com/0xjbushell/copilot-interactive-subagents#readme",
+  "bugs": {
+    "url": "https://github.com/0xjbushell/copilot-interactive-subagents/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs test/unit/*.test.mjs",
     "test:unit": "node --test test/unit/*.test.mjs",

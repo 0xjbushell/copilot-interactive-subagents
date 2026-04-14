@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: CRAP scoring
+        run: npm run test:crap
+
+      - name: Mutation testing
+        run: npm run test:mutation
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Find previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            # First release — use full history
+            RANGE=""
+            COMPARE_BASE=$(git rev-list --max-parents=0 HEAD | head -1)
+          else
+            RANGE="${PREV_TAG}..HEAD"
+            COMPARE_BASE="$PREV_TAG"
+          fi
+
+          # Generate changelog from conventional commits
+          {
+            echo "## What's Changed"
+            echo ""
+
+            # Features
+            FEATS=$(git log ${RANGE:+"$RANGE"} --pretty=format:'- %s' --grep='^feat' 2>/dev/null || true)
+            if [ -n "$FEATS" ]; then
+              echo "### ✨ Features"
+              echo "$FEATS" | sed 's/^- feat[^:]*: /- /'
+              echo ""
+            fi
+
+            # Fixes
+            FIXES=$(git log ${RANGE:+"$RANGE"} --pretty=format:'- %s' --grep='^fix' 2>/dev/null || true)
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo "$FIXES" | sed 's/^- fix[^:]*: /- /'
+              echo ""
+            fi
+
+            # Other changes (limit to 20)
+            OTHERS=$(git log ${RANGE:+"$RANGE"} --pretty=format:'- %s' --invert-grep --grep='^feat' --grep='^fix' 2>/dev/null | head -20 || true)
+            if [ -n "$OTHERS" ]; then
+              echo "### 📦 Other Changes"
+              echo "$OTHERS"
+              echo ""
+            fi
+
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${COMPARE_BASE}...${GITHUB_REF_NAME}"
+          } > /tmp/changelog.md
+
+          cat /tmp/changelog.md
+
+      - name: Package extension
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ARCHIVE="copilot-interactive-subagents-${TAG}.tar.gz"
+          tar -czf "$ARCHIVE" \
+            .github/extensions/copilot-interactive-subagents/ \
+            .github/skills/using-copilot-interactive-subagents/ \
+            README.md \
+            LICENSE \
+            CHANGELOG.md
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/changelog.md
+          files: ${{ env.ARCHIVE }}
+          generate_release_notes: false
