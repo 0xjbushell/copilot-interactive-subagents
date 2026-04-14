@@ -13,13 +13,10 @@ import {
 import { launchSingleSubagent as defaultContinueLaunch } from "./lib/launch.mjs";
 import { launchParallelSubagents as defaultContinueParallelLaunch } from "./lib/parallel.mjs";
 import { resumeSubagent as defaultContinueResume } from "./lib/resume.mjs";
-import {
-  createStateStore as buildDefaultStateStore,
-  isValidLaunchId,
-} from "./lib/state.mjs";
+import { createStateStore as buildDefaultStateStore } from "./lib/state.mjs";
 import { createStateIndex as buildDefaultStateIndex } from "./lib/state-index.mjs";
 import { setSubagentTitle as defaultContinueSetTitle } from "./lib/titles.mjs";
-import { normalizeNonEmptyString, uniqueStable } from "./lib/utils.mjs";
+import { uniqueStable } from "./lib/utils.mjs";
 import {
   resolveCommandPath,
   createDefaultAgentLaunchCommand,
@@ -31,235 +28,32 @@ import {
   defaultAttachBackendForRuntime,
   defaultStartBackendForRuntime,
 } from "./lib/backend-ops.mjs";
+import {
+  PUBLIC_TOOL_NAMES,
+  PUBLIC_TOOL_DEFINITIONS,
+  PUBLIC_TOOL_PARAMETER_SCHEMAS,
+  CAMELCASE_HANDLER_NAMES,
+} from "./lib/tool-schemas.mjs";
+import {
+  normalizeLaunchRequest,
+  validateLaunchRequest,
+  normalizeParallelRequest,
+  normalizeResumeRequest,
+  validateResumeRequest,
+  normalizeSetTitleRequest,
+  validateSetTitleRequest,
+  addAgentValidationGuidance,
+} from "./lib/validation.mjs";
 
 // Re-export for backward compatibility (tests import these from extension.mjs)
 export { createDefaultAgentLaunchCommand, writeSignalFile };
+export { PUBLIC_TOOL_NAMES, PUBLIC_TOOL_DEFINITIONS, PUBLIC_TOOL_PARAMETER_SCHEMAS };
 
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];
 const DEFAULT_SUPPORTED_STARTUP = {
   cmux: false,
   tmux: true,
   zellij: false,
-};
-
-export const PUBLIC_TOOL_NAMES = [
-  "copilot_subagent_list_agents",
-  "copilot_subagent_launch",
-  "copilot_subagent_parallel",
-  "copilot_subagent_resume",
-  "copilot_subagent_set_title",
-];
-
-export const PUBLIC_TOOL_DEFINITIONS = [
-  {
-    name: "copilot_subagent_list_agents",
-    description: "List exact agent identifiers and supported pane backends.",
-    requestShape: {
-      builtInIdentifiers: "string[] (optional explicit built-in identifiers)",
-    },
-    resultShape: {
-      agentIdentifiers: "string[]",
-      builtInIdentifiersAcceptedExplicitly: "string[]",
-      exactNameOnly: "boolean",
-      supportedBackends:
-        "Array<{ backend, source: attached|startable, attachable, startSupported }>",
-    },
-  },
-  {
-    name: "copilot_subagent_launch",
-    description: "Launch one exact-name agent in a visible pane.",
-    requestShape: {
-      agentIdentifier: "string",
-      task: "string",
-      backend: "cmux|tmux|zellij (optional)",
-      awaitCompletion: "boolean (optional, default true)",
-      interactive: "boolean (optional, default false — use -i flag, pane stays open)",
-      fork: "{ launchId: string } | { copilotSessionId: string } (optional — fork parent session before launch)",
-      closePaneOnCompletion: "boolean (optional, default true for autonomous, false for interactive)",
-    },
-    resultShape: {
-      launchId: "string",
-      backend: "string",
-      paneId: "string|null",
-      sessionId: "string|null",
-      status: "running|success|failure|cancelled|timeout",
-      summary: "string",
-      exitCode: "number|null",
-      resumePointer: "object|null",
-    },
-  },
-  {
-    name: "copilot_subagent_parallel",
-    description: "Launch multiple exact-name agents in one shared backend.",
-    requestShape: {
-      launches:
-        "Array<{ agentIdentifier: string, task: string, backend?: cmux|tmux|zellij, awaitCompletion?: boolean, interactive?: boolean, fork?: { launchId | copilotSessionId }, closePaneOnCompletion?: boolean }>",
-      backend: "cmux|tmux|zellij (optional shared backend override)",
-      awaitCompletion: "boolean (optional shared default)",
-    },
-    resultShape: {
-      aggregateStatus: "running|success|partial-success|failure|timeout",
-      results:
-        "Array<{ launchId, backend, paneId, sessionId, status, summary, exitCode, resumePointer }>",
-      progressByLaunchId: "Record<string, result>",
-    },
-  },
-  {
-    name: "copilot_subagent_resume",
-    description: "Resume a prior pane-backed launch from stored metadata.",
-    requestShape: {
-      launchId: "string (or resumeReference/resumePointer)",
-      awaitCompletion: "boolean (optional, default true)",
-    },
-    resultShape: {
-      launchId: "string",
-      backend: "string|null",
-      paneId: "string|null",
-      sessionId: "string|null",
-      status: "running|success|failure|cancelled|timeout",
-      summary: "string",
-      exitCode: "number|null",
-      resumePointer: "object|null",
-    },
-  },
-  {
-    name: "copilot_subagent_set_title",
-    description: "Update a pane title or operator-facing phase label when the backend supports it.",
-    requestShape: {
-      title: "string",
-      backend: "cmux|tmux|zellij (or resumePointer.backend)",
-      paneId: "string (or resumePointer.paneId)",
-    },
-    resultShape: {
-      ok: "boolean",
-      backend: "string",
-      paneId: "string",
-      title: "string",
-      applied: "boolean",
-      source: "backend-command|runtime",
-    },
-  },
-];
-
-export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
-  copilot_subagent_list_agents: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      builtInIdentifiers: {
-        type: "array",
-        items: { type: "string" },
-        description: "Optional explicit built-in identifiers to accept at launch time.",
-      },
-    },
-  },
-  copilot_subagent_launch: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      agentIdentifier: { type: "string", description: "Exact built-in or custom agent identifier." },
-      task: { type: "string", description: "Task text for the child agent." },
-      backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
-      awaitCompletion: { type: "boolean" },
-      interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
-      fork: {
-        type: "object",
-        description: "Fork a parent session before launching. Provide launchId or copilotSessionId.",
-        properties: {
-          launchId: { type: "string", description: "Launch ID to look up parent session." },
-          copilotSessionId: { type: "string", description: "Parent copilot session UUID to fork directly." },
-        },
-      },
-      closePaneOnCompletion: { type: "boolean", description: "Close pane after completion (default: true for autonomous, false for interactive)." },
-    },
-    required: ["agentIdentifier", "task"],
-  },
-  copilot_subagent_parallel: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
-      awaitCompletion: { type: "boolean" },
-      launches: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            agentIdentifier: { type: "string" },
-            task: { type: "string" },
-            backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
-            awaitCompletion: { type: "boolean" },
-            interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
-            fork: {
-              type: "object",
-              description: "Fork a parent session before launching.",
-              properties: {
-                launchId: { type: "string" },
-                copilotSessionId: { type: "string" },
-              },
-            },
-            closePaneOnCompletion: { type: "boolean", description: "Close pane after completion." },
-          },
-          required: ["agentIdentifier", "task"],
-        },
-      },
-    },
-    required: ["launches"],
-  },
-  copilot_subagent_resume: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      launchId: { type: "string" },
-      resumeReference: {
-        oneOf: [
-          { type: "string" },
-          {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              launchId: { type: "string" },
-            },
-          },
-        ],
-      },
-      resumePointer: {
-        type: "object",
-        additionalProperties: true,
-        properties: {
-          launchId: { type: "string" },
-        },
-      },
-      awaitCompletion: { type: "boolean" },
-    },
-  },
-  copilot_subagent_set_title: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
-      paneId: { type: "string" },
-      title: { type: "string" },
-      resumePointer: {
-        type: "object",
-        additionalProperties: true,
-        properties: {
-          backend: { type: "string" },
-          paneId: { type: "string" },
-        },
-      },
-    },
-    required: ["title"],
-  },
-};
-
-const CAMELCASE_HANDLER_NAMES = {
-  copilot_subagent_list_agents: "copilotSubagentListAgents",
-  copilot_subagent_launch: "copilotSubagentLaunch",
-  copilot_subagent_parallel: "copilotSubagentParallel",
-  copilot_subagent_resume: "copilotSubagentResume",
-  copilot_subagent_set_title: "copilotSubagentSetTitle",
 };
 
 function resolveServiceValue(valueOrFactory) {
@@ -346,215 +140,6 @@ function buildBackendRequest(request = {}, services = {}) {
     env,
     runtimeSupport,
   };
-}
-
-function createArgumentFailure({
-  field,
-  message,
-  guidance,
-  code = "INVALID_ARGUMENT",
-  ...extras
-}) {
-  return {
-    ok: false,
-    code,
-    message,
-    field,
-    guidance,
-    ...extras,
-  };
-}
-
-const AGENT_VALIDATION_GUIDANCE = {
-  AGENT_NOT_FOUND:
-    "Provide the exact runtime-recognized agent identifier. Use copilot_subagent_list_agents to discover valid names.",
-  AGENT_VALIDATION_UNAVAILABLE:
-    "Retry agent discovery or target an explicitly allowed built-in identifier if your workflow already knows it.",
-  AGENT_DISCOVERY_UNAVAILABLE:
-    "Agent discovery is temporarily unavailable. Retry discovery or target an explicitly allowed built-in identifier.",
-};
-
-function addAgentValidationGuidance(result = {}, field) {
-  if (result.ok !== false) {
-    return result;
-  }
-
-  const guidance = AGENT_VALIDATION_GUIDANCE[result.code];
-  if (guidance) {
-    return { ...result, ...(field ? { field } : {}), guidance };
-  }
-
-  return result;
-}
-
-function normalizeLaunchRequest(request = {}) {
-  const requestedIdentifier =
-    normalizeNonEmptyString(request.requestedIdentifier) ?? normalizeNonEmptyString(request.agentIdentifier);
-  const requestedBackend =
-    normalizeNonEmptyString(request.requestedBackend) ?? normalizeNonEmptyString(request.backend);
-
-  return {
-    ...request,
-    ...(requestedIdentifier ? { requestedIdentifier } : {}),
-    ...(requestedBackend ? { requestedBackend } : {}),
-  };
-}
-
-function validateLaunchRequest(request = {}, { fieldPrefix = "" } = {}) {
-  const prefix = fieldPrefix ? `${fieldPrefix}.` : "";
-
-  if (!normalizeNonEmptyString(request.requestedIdentifier)) {
-    return createArgumentFailure({
-      field: `${prefix}agentIdentifier`,
-      message: "agentIdentifier must be a non-empty string.",
-      guidance:
-        "Provide the exact runtime-recognized agent identifier. Use copilot_subagent_list_agents to discover valid names.",
-    });
-  }
-
-  if (!normalizeNonEmptyString(request.task)) {
-    return createArgumentFailure({
-      field: `${prefix}task`,
-      message: "task must be a non-empty string.",
-      guidance: "Provide the task text that should be sent to the target agent.",
-    });
-  }
-
-  return null;
-}
-
-function normalizeParallelRequest(request = {}) {
-  if (!Array.isArray(request.launches) || request.launches.length === 0) {
-    return createArgumentFailure({
-      field: "launches",
-      message: "launches must be a non-empty array.",
-      guidance: "Provide at least one { agentIdentifier, task } entry.",
-    });
-  }
-
-  const normalizedLaunches = [];
-  const requestedBackends = [];
-
-  for (const [index, launch] of request.launches.entries()) {
-    const normalizedEntry = normalizeLaunchRequest({
-      ...launch,
-      awaitCompletion: launch?.awaitCompletion ?? request.awaitCompletion,
-      requestedBackend:
-        launch?.requestedBackend ?? launch?.backend ?? request.requestedBackend ?? request.backend,
-    });
-
-    const validationFailure = validateLaunchRequest(normalizedEntry, {
-      fieldPrefix: `launches[${index}]`,
-    });
-    if (validationFailure) {
-      return validationFailure;
-    }
-
-    if (normalizedEntry.requestedBackend) {
-      requestedBackends.push(normalizedEntry.requestedBackend);
-    }
-
-    normalizedLaunches.push({ request: normalizedEntry });
-  }
-
-  const uniqueBackends = uniqueStable(requestedBackends);
-  if (uniqueBackends.length > 1) {
-    return createArgumentFailure({
-      code: "PARALLEL_BACKEND_CONFLICT",
-      field: "launches",
-      message: "Parallel launches must target the same backend when a backend is specified.",
-      guidance:
-        "Use one backend for the whole batch or omit backend so the extension resolves one shared backend.",
-      requestedBackends: uniqueBackends,
-    });
-  }
-
-  return {
-    request: normalizeLaunchRequest({
-      ...request,
-      ...(uniqueBackends[0] ? { requestedBackend: uniqueBackends[0] } : {}),
-    }),
-    launches: normalizedLaunches,
-  };
-}
-
-function normalizeResumeRequest(request = {}) {
-  const launchId =
-    normalizeNonEmptyString(request.launchId)
-    ?? normalizeNonEmptyString(request.resumeReference)
-    ?? normalizeNonEmptyString(request.resumeReference?.launchId)
-    ?? normalizeNonEmptyString(request.resumePointer?.launchId);
-
-  return {
-    ...request,
-    ...(launchId ? { launchId } : {}),
-  };
-}
-
-function validateResumeRequest(request = {}) {
-  if (!request.launchId) {
-    return createArgumentFailure({
-      field: "launchId",
-      message: "launchId or a stored resume reference is required.",
-      guidance: "Pass launchId directly or provide resumeReference/resumePointer with launchId.",
-    });
-  }
-
-  if (!isValidLaunchId(request.launchId)) {
-    return createArgumentFailure({
-      field: "launchId",
-      message: "launchId must use only letters, numbers, periods, underscores, and hyphens.",
-      guidance: "Use the launchId returned by a prior launch or resume response.",
-    });
-  }
-
-  return null;
-}
-
-function normalizeSetTitleRequest(request = {}) {
-  const backend =
-    normalizeNonEmptyString(request.backend)
-    ?? normalizeNonEmptyString(request.requestedBackend)
-    ?? normalizeNonEmptyString(request.resumePointer?.backend);
-  const paneId =
-    normalizeNonEmptyString(request.paneId)
-    ?? normalizeNonEmptyString(request.resumePointer?.paneId);
-  const title = normalizeNonEmptyString(request.title);
-
-  return {
-    ...request,
-    ...(backend ? { backend, requestedBackend: backend } : {}),
-    ...(paneId ? { paneId } : {}),
-    ...(title ? { title } : {}),
-  };
-}
-
-function validateSetTitleRequest(request = {}) {
-  if (!normalizeNonEmptyString(request.title)) {
-    return createArgumentFailure({
-      field: "title",
-      message: "title must be a non-empty string.",
-      guidance: "Provide the human-readable phase or title to show in the pane.",
-    });
-  }
-
-  if (!normalizeNonEmptyString(request.backend)) {
-    return createArgumentFailure({
-      field: "backend",
-      message: "backend must be provided directly or via resumePointer.backend.",
-      guidance: "Pass the backend that owns the target pane.",
-    });
-  }
-
-  if (!normalizeNonEmptyString(request.paneId)) {
-    return createArgumentFailure({
-      field: "paneId",
-      message: "paneId must be provided directly or via resumePointer.paneId.",
-      guidance: "Pass the pane identifier returned from launch or resume.",
-    });
-  }
-
-  return null;
 }
 
 function defaultCreateStateStore(request = {}) {

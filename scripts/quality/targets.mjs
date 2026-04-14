@@ -13,7 +13,9 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/titles.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/tool-schemas.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/utils.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/validation.mjs",
   ".github/extensions/copilot-interactive-subagents/extension.mjs",
 ];
 
@@ -87,19 +89,19 @@ const DEFAULT_TARGETED_MUTANTS = [
   },
   {
     id: "extension-normalize-request",
-    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    file: ".github/extensions/copilot-interactive-subagents/lib/validation.mjs",
     from: "normalizeNonEmptyString(request.agentIdentifier);",
     to: "null;",
   },
   {
     id: "extension-launch-argument-validation",
-    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    file: ".github/extensions/copilot-interactive-subagents/lib/validation.mjs",
     from: '      field: `${prefix}agentIdentifier`,',
     to: '      field: `${prefix}task`,',
   },
   {
     id: "extension-parallel-backend-conflict",
-    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    file: ".github/extensions/copilot-interactive-subagents/lib/validation.mjs",
     from: "  if (uniqueBackends.length > 1) {",
     to: "  if (uniqueBackends.length > 2) {",
   },
