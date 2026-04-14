@@ -11,6 +11,8 @@ function interpretResult(result, label) {
   return { ok: false, code: "CLOSE_PANE_FAILED", message: stderr || `${label} exited with ${result.status}` };
 }
 
+import { stripPanePrefix } from "./utils.mjs";
+
 export function closePane({ backend, paneId, services = {} } = {}) {
   const spawnSync = services.spawnSync ?? defaultSpawnSync;
 
@@ -18,7 +20,7 @@ export function closePane({ backend, paneId, services = {} } = {}) {
     return interpretResult(spawnSync("tmux", ["kill-pane", "-t", paneId], { stdio: "pipe" }), "tmux kill-pane");
   }
   if (backend === "zellij") {
-    const numericId = String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
+    const numericId = stripPanePrefix(paneId);
     return interpretResult(spawnSync("zellij", ["action", "close-pane", "--pane-id", numericId], { stdio: "pipe" }), "zellij close-pane");
   }
 

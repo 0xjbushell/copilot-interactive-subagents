@@ -1,8 +1,9 @@
 export const SUPPORTED_BACKENDS = ["cmux", "zellij", "tmux"];
 
 import { spawnSync as defaultSpawnSync } from "node:child_process";
+import { stripPanePrefix } from "./utils.mjs";
 
-function isAttached(backend, env = {}) {
+export function isAttached(backend, env = {}) {
   switch (backend) {
     case "cmux":
       return Boolean(env.CMUX_SOCKET_PATH);
@@ -15,17 +16,15 @@ function isAttached(backend, env = {}) {
   }
 }
 
+const BACKEND_GUIDANCE = {
+  cmux: "Start Copilot inside cmux or install/configure cmux startup support.",
+  tmux: "Start Copilot inside tmux or install/configure tmux startup support.",
+  zellij: "Start Copilot inside zellij or install/configure zellij startup support.",
+};
+const DEFAULT_GUIDANCE = "Install or configure cmux, tmux, or zellij to enable pane-backed launches.";
+
 function backendGuidance(backend) {
-  switch (backend) {
-    case "cmux":
-      return "Start Copilot inside cmux or install/configure cmux startup support.";
-    case "tmux":
-      return "Start Copilot inside tmux or install/configure tmux startup support.";
-    case "zellij":
-      return "Start Copilot inside zellij or install/configure zellij startup support.";
-    default:
-      return "Install or configure cmux, tmux, or zellij to enable pane-backed launches.";
-  }
+  return BACKEND_GUIDANCE[backend] ?? DEFAULT_GUIDANCE;
 }
 
 function generalGuidance(backends = SUPPORTED_BACKENDS) {
@@ -75,37 +74,16 @@ function formatFailureMessage(failures) {
   return failures.map(({ backend, error }) => `${backend}: ${error}`).join("; ");
 }
 
-async function tryAttachedBackends(backends, attach, env, hasCommand = () => true) {
+async function tryBackends(backends, executor, shouldAttempt, action) {
   const failures = [];
 
   for (const backend of backends) {
-    if (!isAttached(backend, env) || !hasCommand(backend)) {
+    if (!shouldAttempt(backend)) {
       continue;
     }
 
     try {
-      return createBackendSuccess(backend, "attach", await attach(backend));
-    } catch (error) {
-      failures.push({
-        backend,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return { ok: false, failures };
-}
-
-async function tryStartableBackends(backends, start, hasCommand, startupSupport) {
-  const failures = [];
-
-  for (const backend of backends) {
-    if (!hasCommand(backend) || !startupSupport[backend]) {
-      continue;
-    }
-
-    try {
-      return createBackendSuccess(backend, "start", await start(backend));
+      return createBackendSuccess(backend, action, await executor(backend));
     } catch (error) {
       failures.push({
         backend,
@@ -125,7 +103,12 @@ async function resolveRequestedBackend({
   attach,
   start,
 }) {
-  const attachedResolution = await tryAttachedBackends([requestedBackend], attach, env, hasCommand);
+  const attachedResolution = await tryBackends(
+    [requestedBackend],
+    attach,
+    (b) => isAttached(b, env) && hasCommand(b),
+    "attach",
+  );
   if (attachedResolution.ok) {
     return attachedResolution;
   }
@@ -154,11 +137,11 @@ async function resolveRequestedBackend({
     });
   }
 
-  const startResolution = await tryStartableBackends(
+  const startResolution = await tryBackends(
     [requestedBackend],
     start,
-    hasCommand,
-    startupSupport,
+    (b) => hasCommand(b) && startupSupport[b],
+    "start",
   );
 
   if (startResolution.ok) {
@@ -178,7 +161,12 @@ async function resolveAutomaticBackend({
   attach,
   start,
 }) {
-  const attachedResolution = await tryAttachedBackends(SUPPORTED_BACKENDS, attach, env, hasCommand);
+  const attachedResolution = await tryBackends(
+    SUPPORTED_BACKENDS,
+    attach,
+    (b) => isAttached(b, env) && hasCommand(b),
+    "attach",
+  );
   if (attachedResolution.ok) {
     return attachedResolution;
   }
@@ -190,11 +178,11 @@ async function resolveAutomaticBackend({
     });
   }
 
-  const startResolution = await tryStartableBackends(
+  const startResolution = await tryBackends(
     SUPPORTED_BACKENDS,
     start,
-    hasCommand,
-    startupSupport,
+    (b) => hasCommand(b) && startupSupport[b],
+    "start",
   );
   if (startResolution.ok) {
     return startResolution;
@@ -278,7 +266,7 @@ export function probeSessionLiveness({ backend, paneId, services = {} } = {}) {
     return result.status === 0;
   }
   if (backend === "zellij") {
-    const numericId = String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
+    const numericId = stripPanePrefix(paneId);
     const result = spawnSync("zellij", ["action", "dump-screen", "--pane-id", numericId], { stdio: "pipe" });
     return result.status === 0;
   }

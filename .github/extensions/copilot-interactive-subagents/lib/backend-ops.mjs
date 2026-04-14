@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { stripPanePrefix } from "./utils.mjs";
+
 const execFileAsync = promisify(execFile);
 
 export function shellEscape(value) {
@@ -115,10 +117,6 @@ export async function runDefaultBackendCommand({ request, runtimeServices = {}, 
 export function defaultTmuxSessionName(request = {}) {
   const suffix = path.basename(request.projectRoot ?? process.cwd()).replace(/[^A-Za-z0-9_-]+/g, "-");
   return `copilot-subagents-${suffix || "session"}`.slice(0, 64);
-}
-
-export function zellijPaneId(paneId) {
-  return String(paneId).startsWith("pane:") ? String(paneId).slice("pane:".length) : String(paneId);
 }
 
 export async function createPrivateTempFile(prefix, fileName) {
@@ -347,13 +345,13 @@ export async function defaultLaunchAgentInPane({ backend, request, runtimeServic
         request: withoutZellijPaneRequest(request),
         runtimeServices,
         backend,
-        args: ["action", "write-chars", "--pane-id", zellijPaneId(context.paneId), command],
+        args: ["action", "write-chars", "--pane-id", stripPanePrefix(context.paneId), command],
       });
       await runDefaultBackendCommand({
         request: withoutZellijPaneRequest(request),
         runtimeServices,
         backend,
-        args: ["action", "write", "--pane-id", zellijPaneId(context.paneId), "13"],
+        args: ["action", "write", "--pane-id", stripPanePrefix(context.paneId), "13"],
       });
       return {
         sessionId: request.sessionId ?? null,
@@ -374,7 +372,7 @@ export async function defaultReadPaneOutput({ backend, request, runtimeServices 
   }
 
   if (backend === "zellij") {
-    const args = ["action", "dump-screen", "--pane-id", zellijPaneId(context.paneId), "-f"];
+    const args = ["action", "dump-screen", "--pane-id", stripPanePrefix(context.paneId), "-f"];
     const result = await runDefaultBackendCommand({
       request: withoutZellijPaneRequest(request),
       runtimeServices,

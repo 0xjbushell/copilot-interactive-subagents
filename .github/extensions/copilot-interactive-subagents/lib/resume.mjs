@@ -12,17 +12,14 @@ import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } 
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
+import { isActiveOrSuccessful, normalizeNonEmptyString } from "./utils.mjs";
 
 function resolveLaunchId(request = {}) {
-  if (typeof request.launchId === "string" && request.launchId.trim().length > 0) {
-    return request.launchId.trim();
-  }
-
-  if (typeof request.resumeReference === "string" && request.resumeReference.trim().length > 0) {
-    return request.resumeReference.trim();
-  }
-
-  return request.resumePointer?.launchId ?? request.resumeReference?.launchId ?? null;
+  return normalizeNonEmptyString(request.launchId)
+    ?? normalizeNonEmptyString(request.resumeReference)
+    ?? request.resumePointer?.launchId
+    ?? request.resumeReference?.launchId
+    ?? null;
 }
 
 function shapeResumeFailure({
@@ -125,7 +122,7 @@ function shapeResumeResult({ manifest, request, paneVisible, summarySource }) {
     }).summary;
 
   return {
-    ok: manifest.status === "running" || manifest.status === "success" || manifest.status === "interactive",
+    ok: isActiveOrSuccessful(manifest.status),
     launchId: manifest.launchId,
     status: manifest.status,
     agentIdentifier: manifest.agentIdentifier,

@@ -7,6 +7,7 @@ import {
 } from "./lib/agents.mjs";
 import {
   discoverLaunchBackends as defaultDiscoverLaunchBackends,
+  isAttached as isAttachedBackend,
   resolveLaunchBackend as defaultResolveLaunchBackend,
 } from "./lib/mux.mjs";
 import { launchSingleSubagent as defaultContinueLaunch } from "./lib/launch.mjs";
@@ -311,19 +312,6 @@ function supportedRuntimeBackends(request = {}) {
     tmux: true,
     zellij: supportsRuntimeOps("zellij"),
   };
-}
-
-function isAttachedBackend(backend, env = {}) {
-  switch (backend) {
-    case "cmux":
-      return Boolean(env.CMUX_SOCKET_PATH);
-    case "tmux":
-      return Boolean(env.TMUX);
-    case "zellij":
-      return Boolean(env.ZELLIJ || env.ZELLIJ_SESSION_NAME);
-    default:
-      return false;
-  }
 }
 
 function sanitizeBackendEnvironment(env = {}, runtimeSupport = {}) {

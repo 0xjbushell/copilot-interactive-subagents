@@ -9,6 +9,7 @@ import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } 
 import { closePane as defaultClosePane } from "./close-pane.mjs";
 import { forkSession as defaultForkSession } from "./fork-session.mjs";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
+import { isActiveOrSuccessful } from "./utils.mjs";
 
 const DEFAULT_MONITOR_ATTEMPTS = 240;
 
@@ -77,7 +78,7 @@ function shapeLaunchResult({
     }).summary;
 
   return {
-    ok: manifest.status === "success" || manifest.status === "running" || manifest.status === "interactive",
+    ok: isActiveOrSuccessful(manifest.status),
     launchId: manifest.launchId,
     status: manifest.status,
     agentIdentifier: manifest.agentIdentifier,

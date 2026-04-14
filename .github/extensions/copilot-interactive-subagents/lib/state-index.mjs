@@ -71,7 +71,6 @@ async function readIndexFile(indexPath) {
 
 async function writeIndexFile(indexPath, index) {
   await mkdir(path.dirname(indexPath), { recursive: true });
-  await writeFile(`${indexPath}.tmp`, `${JSON.stringify(index, null, 2)}\n`, "utf8");
   await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
 }
 
