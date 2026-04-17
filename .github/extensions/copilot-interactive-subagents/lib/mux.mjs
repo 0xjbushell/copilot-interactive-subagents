@@ -265,22 +265,21 @@ export async function resolveLaunchBackend({
 const DEAD_SHELLS = new Set(["bash", "zsh", "sh", "fish", "dash", "ksh"]);
 
 function paneCommandIndicatesDeadShell(command) {
-  const cmd = String(command ?? "").trim();
-  if (!cmd) return true;
-  const withoutLoginDash = cmd.startsWith("-") ? cmd.slice(1) : cmd;
-  const spaceIndex = withoutLoginDash.search(/\s/);
-  const firstToken = spaceIndex === -1 ? withoutLoginDash : withoutLoginDash.slice(0, spaceIndex);
+  const trimmed = String(command ?? "").trim();
+  if (!trimmed) return true;
+  // Strip leading "-" used by login shells (e.g. "-bash").
+  const normalized = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
+  const [firstToken] = normalized.split(" ");
   return DEAD_SHELLS.has(firstToken);
 }
 
 function parseTmuxPaneLine(line) {
-  const firstSpace = line.indexOf(" ");
-  if (firstSpace === -1) return { id: line, deadFlag: "", currentCommand: "" };
-  const id = line.slice(0, firstSpace);
-  const rest = line.slice(firstSpace + 1).trim();
-  const secondSpace = rest.indexOf(" ");
-  if (secondSpace === -1) return { id, deadFlag: rest, currentCommand: "" };
-  return { id, deadFlag: rest.slice(0, secondSpace), currentCommand: rest.slice(secondSpace + 1) };
+  const parts = line.split(" ");
+  return {
+    id: parts[0] ?? "",
+    deadFlag: parts[1] ?? "",
+    currentCommand: parts.slice(2).join(" "),
+  };
 }
 
 function probeTmuxLiveness(paneId, spawnSync) {

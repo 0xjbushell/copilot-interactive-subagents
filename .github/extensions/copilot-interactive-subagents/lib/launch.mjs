@@ -176,7 +176,6 @@ async function openPaneAndPersist({ plan, request, openPane, stateStore, stateIn
   return {
     paneVisible: pane?.visible !== false,
     pendingManifest,
-    paneContext: pane,
   };
 }
 
@@ -201,7 +200,6 @@ async function runChildLaunch({
   stateIndex,
   pendingManifest,
   paneVisible,
-  paneContext,
   readPaneOutput,
   readChildSessionState,
   closePane,
@@ -425,10 +423,9 @@ export async function launchSingleSubagent({
 
   let paneVisible = false;
   let pendingManifest = null;
-  let paneContext = null;
 
   try {
-    ({ paneVisible, pendingManifest, paneContext } = await openPaneAndPersist({
+    ({ paneVisible, pendingManifest } = await openPaneAndPersist({
       plan,
       request,
       openPane: dependencies.openPane,
@@ -444,7 +441,6 @@ export async function launchSingleSubagent({
       stateIndex: dependencies.stateIndex,
       pendingManifest,
       paneVisible,
-      paneContext,
       readPaneOutput: dependencies.readPaneOutput,
       readChildSessionState: dependencies.readChildSessionState,
       closePane: dependencies.closePane,

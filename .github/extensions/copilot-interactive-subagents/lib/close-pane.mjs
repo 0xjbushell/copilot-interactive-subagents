@@ -1,4 +1,5 @@
 import { spawnSync as defaultSpawnSync } from "node:child_process";
+import { stripPanePrefix } from "./utils.mjs";
 
 function interpretResult(result, label) {
   if (result.status === 0) {
@@ -10,8 +11,6 @@ function interpretResult(result, label) {
   }
   return { ok: false, code: "CLOSE_PANE_FAILED", message: stderr || `${label} exited with ${result.status}` };
 }
-
-import { stripPanePrefix } from "./utils.mjs";
 
 export function closePane({ backend, paneId, services = {} } = {}) {
   const spawnSync = services.spawnSync ?? defaultSpawnSync;
