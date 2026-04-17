@@ -259,16 +259,57 @@ export async function resolveLaunchBackend({
   });
 }
 
+// A pane whose foreground command is a plain shell is treated as "dead" —
+// the copilot subprocess has exited and the user hasn't closed the zombie pane yet.
+// Resume is safe in that state: we open a fresh pane bound to the same sessionId.
+const DEAD_SHELL_PATTERN = /^-?(bash|zsh|sh|fish|dash|ksh)(\s|$)/;
+
+function paneCommandIndicatesDeadShell(command) {
+  const cmd = String(command ?? "").trim();
+  if (!cmd) return true;
+  return DEAD_SHELL_PATTERN.test(cmd);
+}
+
 export function probeSessionLiveness({ backend, paneId, services = {} } = {}) {
   const spawnSync = services.spawnSync ?? defaultSpawnSync;
   if (backend === "tmux") {
-    const result = spawnSync("tmux", ["has-session", "-t", paneId], { stdio: "pipe" });
-    return result.status === 0;
+    const result = spawnSync(
+      "tmux",
+      ["list-panes", "-a", "-F", "#{pane_id} #{pane_dead} #{pane_current_command}"],
+      { stdio: "pipe" },
+    );
+    if (result.status !== 0) return false;
+    const stdout = String(result.stdout ?? "");
+    for (const line of stdout.split(/\r?\n/)) {
+      if (!line) continue;
+      const firstSpace = line.indexOf(" ");
+      const id = firstSpace === -1 ? line : line.slice(0, firstSpace);
+      if (id !== paneId) continue;
+      const rest = firstSpace === -1 ? "" : line.slice(firstSpace + 1).trim();
+      const secondSpace = rest.indexOf(" ");
+      const deadFlag = secondSpace === -1 ? rest : rest.slice(0, secondSpace);
+      const currentCommand = secondSpace === -1 ? "" : rest.slice(secondSpace + 1);
+      if (deadFlag === "1") return false;
+      return !paneCommandIndicatesDeadShell(currentCommand);
+    }
+    return false;
   }
   if (backend === "zellij") {
-    const numericId = stripPanePrefix(paneId);
-    const result = spawnSync("zellij", ["action", "dump-screen", "--pane-id", numericId], { stdio: "pipe" });
-    return result.status === 0;
+    const numericId = Number.parseInt(stripPanePrefix(paneId), 10);
+    if (!Number.isFinite(numericId)) return false;
+    const result = spawnSync("zellij", ["action", "list-panes", "-j", "-c"], { stdio: "pipe" });
+    if (result.status !== 0) return false;
+    let panes;
+    try {
+      panes = JSON.parse(String(result.stdout ?? ""));
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(panes)) return false;
+    const match = panes.find((p) => p && p.is_plugin === false && Number(p.id) === numericId);
+    if (!match) return false;
+    if (match.exited === true) return false;
+    return !paneCommandIndicatesDeadShell(match.pane_command);
   }
   return false;
 }

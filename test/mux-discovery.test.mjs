@@ -439,38 +439,189 @@ describe("mux discovery and launch prerequisites", () => {
 });
 
 describe("probeSessionLiveness", () => {
-  it("GIVEN tmux backend WHEN has-session succeeds THEN returns true", async () => {
+  const loadProbe = async () => {
     const { probeSessionLiveness } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
       ["probeSessionLiveness"],
     );
-    const result = probeSessionLiveness({
+    return probeSessionLiveness;
+  };
+
+  const tmuxStdout = (lines) => ({
+    status: 0,
+    stdout: Buffer.from(lines.join("\n") + "\n"),
+  });
+
+  const zellijStdout = (panes) => ({
+    status: 0,
+    stdout: Buffer.from(JSON.stringify(panes)),
+  });
+
+  it("GIVEN tmux backend WHEN list-panes shows pane with copilot THEN returns true", async () => {
+    const probe = await loadProbe();
+    const result = probe({
       backend: "tmux",
       paneId: "%5",
-      services: { spawnSync: () => ({ status: 0 }) },
+      services: {
+        spawnSync: (cmd, args) => {
+          assert.equal(cmd, "tmux");
+          assert.deepEqual(args, ["list-panes", "-a", "-F", "#{pane_id} #{pane_dead} #{pane_current_command}"]);
+          return tmuxStdout(["%4 0 bash", "%5 0 copilot"]);
+        },
+      },
     });
     assert.equal(result, true);
   });
 
-  it("GIVEN tmux backend WHEN has-session fails THEN returns false", async () => {
-    const { probeSessionLiveness } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
-      ["probeSessionLiveness"],
-    );
-    const result = probeSessionLiveness({
+  it("GIVEN tmux backend WHEN pane's current command is bash THEN returns false (dead shell)", async () => {
+    const probe = await loadProbe();
+    const result = probe({
       backend: "tmux",
       paneId: "%5",
-      services: { spawnSync: () => ({ status: 1 }) },
+      services: { spawnSync: () => tmuxStdout(["%5 0 bash"]) },
     });
     assert.equal(result, false);
   });
 
+  it("GIVEN tmux backend WHEN pane_dead flag is 1 THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "tmux",
+      paneId: "%5",
+      services: { spawnSync: () => tmuxStdout(["%5 1 copilot"]) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN tmux backend WHEN pane is absent from list THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "tmux",
+      paneId: "%99",
+      services: { spawnSync: () => tmuxStdout(["%4 0 bash", "%5 0 copilot"]) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN tmux backend WHEN list-panes fails THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "tmux",
+      paneId: "%5",
+      services: { spawnSync: () => ({ status: 1, stdout: Buffer.from("") }) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN list-panes shows pane running copilot THEN returns true", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:6",
+      services: {
+        spawnSync: (cmd, args) => {
+          assert.equal(cmd, "zellij");
+          assert.deepEqual(args, ["action", "list-panes", "-j", "-c"]);
+          return zellijStdout([
+            { id: 0, is_plugin: false, exited: false, pane_command: "bash" },
+            { id: 6, is_plugin: false, exited: false, pane_command: "copilot -i --resume=abc" },
+          ]);
+        },
+      },
+    });
+    assert.equal(result, true);
+  });
+
+  it("GIVEN zellij backend WHEN pane_command is plain bash THEN returns false (dead shell)", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:6",
+      services: {
+        spawnSync: () => zellijStdout([
+          { id: 6, is_plugin: false, exited: false, pane_command: "bash" },
+        ]),
+      },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN pane is exited THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:6",
+      services: {
+        spawnSync: () => zellijStdout([
+          { id: 6, is_plugin: false, exited: true, pane_command: "copilot" },
+        ]),
+      },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN pane id is absent THEN returns false (this is the headless-dump-screen bug regression)", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:99",
+      services: {
+        spawnSync: () => zellijStdout([
+          { id: 0, is_plugin: false, exited: false, pane_command: "copilot" },
+        ]),
+      },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN list-panes output is not JSON THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:6",
+      services: { spawnSync: () => ({ status: 0, stdout: Buffer.from("not json") }) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN list-panes command itself fails THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:6",
+      services: { spawnSync: () => ({ status: 1, stdout: Buffer.from("") }) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN pane_id is non-numeric THEN returns false", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:not-a-number",
+      services: { spawnSync: () => zellijStdout([]) },
+    });
+    assert.equal(result, false);
+  });
+
+  it("GIVEN zellij backend WHEN plugin pane shares id with terminal pane THEN terminal pane decides", async () => {
+    const probe = await loadProbe();
+    const result = probe({
+      backend: "zellij",
+      paneId: "pane:6",
+      services: {
+        spawnSync: () => zellijStdout([
+          { id: 6, is_plugin: true, exited: false, pane_command: null },
+          { id: 6, is_plugin: false, exited: false, pane_command: "copilot -i" },
+        ]),
+      },
+    });
+    assert.equal(result, true);
+  });
+
   it("GIVEN unknown backend WHEN probed THEN returns false", async () => {
-    const { probeSessionLiveness } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
-      ["probeSessionLiveness"],
-    );
-    const result = probeSessionLiveness({ backend: "unknown", paneId: "%1" });
+    const probe = await loadProbe();
+    const result = probe({ backend: "unknown", paneId: "%1" });
     assert.equal(result, false);
   });
 });
