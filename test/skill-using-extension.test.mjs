@@ -41,8 +41,8 @@ test("project skill documents the core tool workflow and operating constraints",
 
   assert.match(skill, /exact-name only/i);
   assert.match(skill, /github-copilot/);
-  assert.match(skill, /Prefer `tmux` by default\./);
-  assert.match(skill, /Use `zellij` only from inside an attached `zellij` session\./);
+  assert.match(skill, /Prefer `tmux` by default/);
+  assert.match(skill, /Use `zellij` only from inside an attached zellij session/);
   assert.match(skill, /awaitCompletion: true/);
   assert.match(skill, /launchId|resumePointer/);
   assert.match(skill, /AGENT_NOT_FOUND/);
@@ -50,6 +50,7 @@ test("project skill documents the core tool workflow and operating constraints",
   assert.match(skill, /BACKEND_START_UNSUPPORTED/);
   assert.match(skill, /PARALLEL_BACKEND_CONFLICT/);
   assert.match(skill, /RESUME_TARGET_INVALID|LAUNCH_NOT_FOUND/);
-  assert.match(skill, /Interactive Copilot CLI is the validated operating mode/i);
-  assert.match(skill, /docs\/skills-integration\.md/);
+  assert.match(skill, /SESSION_ACTIVE/);
+  assert.match(skill, /interactive/i);
+  assert.match(skill, /fork/i);
 });

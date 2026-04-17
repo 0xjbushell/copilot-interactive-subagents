@@ -331,7 +331,14 @@ describe("mux discovery and launch prerequisites", () => {
       await chmod(tmuxPath, 0o755);
 
       const handlers = await createExtensionHandlers({
-        env: { PATH: tempPath },
+        env: {
+          PATH: tempPath,
+          ZELLIJ: "",
+          ZELLIJ_SESSION_NAME: "",
+          ZELLIJ_PANE_ID: "",
+          TMUX: "",
+          CMUX_SOCKET_PATH: "",
+        },
         listRuntimeAgents: async () => ({
           runtimeRecognizedIdentifiers: ["reviewer"],
           builtInIdentifiersAcceptedExplicitly: ["github-copilot"],
