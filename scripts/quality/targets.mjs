@@ -426,6 +426,18 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: 'failureCount: results.filter((result) => !["pending", "running", "interactive", "success", "ping"].includes(result.status)).length,',
     to: 'failureCount: results.filter((result) => !["pending", "running", "interactive", "success"].includes(result.status)).length,',
   },
+  {
+    id: "extension-d41-child-filter-gate",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: '  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));\n  }',
+    to: '  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));\n  }',
+  },
+  {
+    id: "extension-d41-child-filter-applied",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: 'tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));',
+    to: '/* filter disabled */;',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [

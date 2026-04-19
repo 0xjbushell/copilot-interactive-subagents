@@ -230,6 +230,22 @@ export const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_set_title: "copilotSubagentSetTitle",
 };
 
+// D4.1: explicit allow-list of tool names that MUST be stripped from a child's
+// tools[] before joinSession (parent-only tools). Filtering happens AFTER alias
+// expansion in registerExtensionSession.
+export const PUBLIC_SPAWNING_TOOL_NAMES = new Set([
+  "copilot_subagent_launch",
+  "copilot_subagent_parallel",
+  "copilot_subagent_resume",
+  "copilot_subagent_set_title",
+  "copilot_subagent_list_agents",
+  "copilotSubagentLaunch",
+  "copilotSubagentParallel",
+  "copilotSubagentResume",
+  "copilotSubagentSetTitle",
+  "copilotSubagentListAgents",
+]);
+
 // D2.1: name constant only (runtime tool def lives inline in extension.mjs).
 // Used by D4.1's child-only filter set.
 export const CALLER_PING_TOOL_NAME = "caller_ping";

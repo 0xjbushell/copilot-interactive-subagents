@@ -34,6 +34,7 @@ import {
   PUBLIC_TOOL_DEFINITIONS,
   PUBLIC_TOOL_PARAMETER_SCHEMAS,
   CAMELCASE_HANDLER_NAMES,
+  PUBLIC_SPAWNING_TOOL_NAMES,
 } from "./lib/tool-schemas.mjs";
 import {
   normalizeLaunchRequest,
@@ -525,7 +526,13 @@ export async function registerExtensionSession(options = {}) {
     },
   });
 
-  const tools = buildSdkTools(handlers);
+  let tools = buildSdkTools(handlers);
+
+  // D4.1: strip parent-only spawning tools when running inside a child session.
+  // Filter happens AFTER alias expansion so camelCase aliases are also caught.
+  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));
+  }
 
   const childToolServices = buildChildToolServices(options);
 
