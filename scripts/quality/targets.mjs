@@ -402,6 +402,30 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: 'pingHistory,\n        lastExitType: null,',
     to: 'pingHistory,\n        lastExitType: "ping",',
   },
+  {
+    id: "progress-terminal-includes-ping",
+    file: ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+    from: 'const TERMINAL_STATUSES = new Set(["success", "failure", "cancelled", "timeout", "ping"]);',
+    to: 'const TERMINAL_STATUSES = new Set(["success", "failure", "cancelled", "timeout"]);',
+  },
+  {
+    id: "progress-non-failure-terminal-aggregate",
+    file: ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+    from: 'const NON_FAILURE_TERMINAL = new Set(["success", "ping"]);',
+    to: 'const NON_FAILURE_TERMINAL = new Set(["success"]);',
+  },
+  {
+    id: "progress-snapshot-ping-count",
+    file: ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+    from: 'pingCount: results.filter((result) => result.status === "ping").length,',
+    to: 'pingCount: 0,',
+  },
+  {
+    id: "progress-snapshot-failure-excludes-ping",
+    file: ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+    from: 'failureCount: results.filter((result) => !["pending", "running", "interactive", "success", "ping"].includes(result.status)).length,',
+    to: 'failureCount: results.filter((result) => !["pending", "running", "interactive", "success"].includes(result.status)).length,',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [
