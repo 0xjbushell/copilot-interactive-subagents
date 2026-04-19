@@ -360,6 +360,30 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: '    summary: null,\n    exitCode: 0,\n    ping: { message: completion.message },',
     to: '    summary: "",\n    exitCode: 0,\n    ping: { message: completion.message },',
   },
+  {
+    id: "subagent-done-gate-launch-id",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: '  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    tools.push({\n      name: "subagent_done",',
+    to: '  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    tools.push({\n      name: "subagent_done",',
+  },
+  {
+    id: "subagent-done-sidecar-type-done",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: '          type: "done",\n          summary: trimmed,',
+    to: '          type: "ping",\n          summary: trimmed,',
+  },
+  {
+    id: "subagent-done-summary-trim-guard",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: 'const trimmed = (typeof summary === "string" && summary.trim().length > 0) ? summary : null;',
+    to: 'const trimmed = summary ?? null;',
+  },
+  {
+    id: "subagent-done-return-message",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: '          message: "Session is terminating. Do not call further tools. End your turn.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
+    to: '          message: "Task marked complete. Session ending.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [

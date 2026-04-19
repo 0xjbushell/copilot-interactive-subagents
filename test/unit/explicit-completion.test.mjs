@@ -53,13 +53,13 @@ describe("Explicit completion (subagent_done)", () => {
   });
 
   describe("subagent_done tool registration", () => {
-    it("GIVEN COPILOT_SUBAGENT_SESSION_ID set WHEN session registers THEN subagent_done tool is included", async () => {
+    it("GIVEN COPILOT_SUBAGENT_LAUNCH_ID set WHEN session registers THEN subagent_done tool is included with optional summary parameter", async () => {
       const { registerExtensionSession } = await importProjectModule(EXT_PATH, ["registerExtensionSession"]);
-      const originalEnv = process.env.COPILOT_SUBAGENT_SESSION_ID;
       const originalLaunchEnv = process.env.COPILOT_SUBAGENT_LAUNCH_ID;
+      const originalSessionEnv = process.env.COPILOT_SUBAGENT_SESSION_ID;
       try {
-        process.env.COPILOT_SUBAGENT_SESSION_ID = "test-session-id";
         process.env.COPILOT_SUBAGENT_LAUNCH_ID = "test-launch-id";
+        delete process.env.COPILOT_SUBAGENT_SESSION_ID;
 
         let registeredTools;
         const mockJoinSession = async ({ tools }) => {
@@ -71,21 +71,23 @@ describe("Explicit completion (subagent_done)", () => {
 
         const doneTool = registeredTools.find((t) => t.name === "subagent_done");
         assert.ok(doneTool, "subagent_done tool should be registered");
-        assert.deepEqual(doneTool.parameters, {});
-        assert.ok(doneTool.description.includes("completed your task"));
+        assert.equal(doneTool.parameters.type, "object");
+        assert.ok(doneTool.parameters.properties.summary, "summary param should be defined");
+        assert.equal(doneTool.parameters.properties.summary.type, "string");
+        assert.ok(!Array.isArray(doneTool.parameters.required) || doneTool.parameters.required.length === 0, "summary must NOT be required");
       } finally {
-        if (originalEnv === undefined) delete process.env.COPILOT_SUBAGENT_SESSION_ID;
-        else process.env.COPILOT_SUBAGENT_SESSION_ID = originalEnv;
         if (originalLaunchEnv === undefined) delete process.env.COPILOT_SUBAGENT_LAUNCH_ID;
         else process.env.COPILOT_SUBAGENT_LAUNCH_ID = originalLaunchEnv;
+        if (originalSessionEnv === undefined) delete process.env.COPILOT_SUBAGENT_SESSION_ID;
+        else process.env.COPILOT_SUBAGENT_SESSION_ID = originalSessionEnv;
       }
     });
 
-    it("GIVEN COPILOT_SUBAGENT_SESSION_ID not set WHEN session registers THEN subagent_done not included", async () => {
+    it("GIVEN COPILOT_SUBAGENT_LAUNCH_ID not set WHEN session registers THEN subagent_done not included", async () => {
       const { registerExtensionSession } = await importProjectModule(EXT_PATH, ["registerExtensionSession"]);
-      const originalEnv = process.env.COPILOT_SUBAGENT_SESSION_ID;
+      const originalLaunchEnv = process.env.COPILOT_SUBAGENT_LAUNCH_ID;
       try {
-        delete process.env.COPILOT_SUBAGENT_SESSION_ID;
+        delete process.env.COPILOT_SUBAGENT_LAUNCH_ID;
 
         let registeredTools;
         const mockJoinSession = async ({ tools }) => {
@@ -98,8 +100,8 @@ describe("Explicit completion (subagent_done)", () => {
         const doneTool = registeredTools.find((t) => t.name === "subagent_done");
         assert.equal(doneTool, undefined, "subagent_done should NOT be registered without env var");
       } finally {
-        if (originalEnv === undefined) delete process.env.COPILOT_SUBAGENT_SESSION_ID;
-        else process.env.COPILOT_SUBAGENT_SESSION_ID = originalEnv;
+        if (originalLaunchEnv === undefined) delete process.env.COPILOT_SUBAGENT_LAUNCH_ID;
+        else process.env.COPILOT_SUBAGENT_LAUNCH_ID = originalLaunchEnv;
       }
     });
   });

@@ -569,18 +569,31 @@ export async function registerExtensionSession(options = {}) {
     });
   }
 
-  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {
+  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
     tools.push({
       name: "subagent_done",
       description:
-        "Call when you have completed your task. Put your final summary in your last message BEFORE calling this tool. Your session will end after this call.",
-      parameters: {},
-      handler: () => {
-        writeSignalFile({
-          copilotSessionId: process.env.COPILOT_SUBAGENT_SESSION_ID,
+        "Call when you have completed your task. Optionally pass a summary; otherwise put your final summary in your last message before calling. Session ends after this call.",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "Optional final summary text." },
+        },
+      },
+      handler: ({ summary } = {}) => {
+        const trimmed = (typeof summary === "string" && summary.trim().length > 0) ? summary : null;
+        writeExitSidecar({
           launchId: process.env.COPILOT_SUBAGENT_LAUNCH_ID,
+          type: "done",
+          summary: trimmed,
+          exitCode: 0,
+          stateDir: resolveChildStateDir(),
+          services: childToolServices,
         });
-        return { ok: true, message: "Task marked complete. Session ending." };
+        return {
+          ok: true,
+          message: "Session is terminating. Do not call further tools. End your turn.",
+        };
       },
     });
   }
