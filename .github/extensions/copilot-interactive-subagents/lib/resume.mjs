@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
 import { isActiveOrSuccessful, normalizeNonEmptyString, countNonEmptyLines } from "./utils.mjs";
+import { resolveStateDir } from "./exit-sidecar.mjs";
 
 function resolveLaunchId(request = {}) {
   return normalizeNonEmptyString(request.launchId)
@@ -242,6 +243,10 @@ async function openResumePane({ manifest, request, services }) {
 }
 
 export async function resumeSubagent({ request = {}, services = {} } = {}) {
+  request = {
+    ...request,
+    stateDir: request.stateDir ?? resolveStateDir({ projectRoot: request.projectRoot }),
+  };
   const plan = await planResumeSession({ request, services });
   if (!plan.ok) {
     return plan;

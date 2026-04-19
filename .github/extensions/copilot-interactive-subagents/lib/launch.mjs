@@ -5,6 +5,7 @@ import {
   buildResumePointer,
   createLaunchRecord,
 } from "./state.mjs";
+import { resolveStateDir } from "./exit-sidecar.mjs";
 import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
 import { forkSession as defaultForkSession } from "./fork-session.mjs";
@@ -377,6 +378,10 @@ export async function launchSingleSubagent({
   createLaunchId,
   now,
 } = {}) {
+  request = {
+    ...request,
+    stateDir: request.stateDir ?? resolveStateDir({ projectRoot: request.projectRoot }),
+  };
   const plan = planSingleLaunch({
     request,
     agentValidation,

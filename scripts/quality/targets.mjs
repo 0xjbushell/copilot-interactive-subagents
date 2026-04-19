@@ -2,6 +2,7 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/backend-ops.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
+  ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/fork-session.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
   ".github/extensions/copilot-interactive-subagents/lib/mux-layout.mjs",
@@ -190,6 +191,36 @@ const DEFAULT_TARGETED_MUTANTS = [
     file: ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
     from: 'export const SUPPORTED_BACKENDS = ["cmux", "zellij", "tmux"];',
     to: 'export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];',
+  },
+  {
+    id: "exit-sidecar-version",
+    file: ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+    from: "export const SIDECAR_VERSION = 1;",
+    to: "export const SIDECAR_VERSION = 2;",
+  },
+  {
+    id: "exit-sidecar-dirname",
+    file: ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+    from: 'export const SIDECAR_DIRNAME = "exit";',
+    to: 'export const SIDECAR_DIRNAME = "done";',
+  },
+  {
+    id: "exit-sidecar-allowed-types",
+    file: ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+    from: 'const ALLOWED_TYPES = new Set(["done", "ping"]);',
+    to: 'const ALLOWED_TYPES = new Set(["done", "ping", "wat"]);',
+  },
+  {
+    id: "exit-sidecar-resolve-default",
+    file: ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+    from: "  const root = projectRoot ?? process.cwd();",
+    to: '  const root = projectRoot ?? "/tmp";',
+  },
+  {
+    id: "backend-ops-state-dir-env",
+    file: ".github/extensions/copilot-interactive-subagents/lib/backend-ops.mjs",
+    from: "    parts.push(`COPILOT_SUBAGENT_STATE_DIR=${shellEscape(request.stateDir)}`);",
+    to: "    parts.push(`COPILOT_SUBAGENT_OTHER_DIR=${shellEscape(request.stateDir)}`);",
   },
 ];
 
