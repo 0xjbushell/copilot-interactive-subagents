@@ -161,6 +161,8 @@ async function awaitResumeCompletion({
   const readChildSessionState = resolveOperation({ request, services, name: "readChildSessionState" });
 
   const completion = await waitForLaunchCompletion({
+    launchId: manifest.launchId,
+    stateDir: request.stateDir,
     backend: manifest.backend,
     paneId: newPaneId,
     sessionId: manifest.sessionId,
@@ -171,6 +173,7 @@ async function awaitResumeCompletion({
     maxAttempts: request.maxMonitorAttempts ?? 25,
     pollIntervalMs: request.pollIntervalMs ?? 500,
     sleep: request.sleep,
+    sidecarGraceMs: request.sidecarGraceMs ?? 500,
   });
 
   let completionSummary = completion.summary;

@@ -28,6 +28,7 @@ function createLaunch({
       requestedIdentifier,
       task,
       awaitCompletion,
+      sidecarGraceMs: 0,
       ...(maxMonitorAttempts ? { maxMonitorAttempts } : {}),
     },
     agentValidation: {

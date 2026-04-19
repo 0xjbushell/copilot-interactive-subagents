@@ -239,6 +239,8 @@ async function runChildLaunch({
   }
 
   const completion = await waitForLaunchCompletion({
+    launchId: plan.launchId,
+    stateDir: request.stateDir,
     backend: plan.backend,
     paneId: activeManifest.paneId,
     sessionId: activeManifest.sessionId,
@@ -248,6 +250,7 @@ async function runChildLaunch({
     maxAttempts: request.maxMonitorAttempts ?? DEFAULT_MONITOR_ATTEMPTS,
     pollIntervalMs: request.pollIntervalMs ?? 500,
     sleep: request.sleep,
+    sidecarGraceMs: request.sidecarGraceMs ?? 500,
     request,
   });
 

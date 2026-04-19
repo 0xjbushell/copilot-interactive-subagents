@@ -187,6 +187,36 @@ const DEFAULT_TARGETED_MUTANTS = [
     to: 'return "failure";',
   },
   {
+    id: "summary-sidecar-source-tag",
+    file: ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+    from: '    source: "sidecar",',
+    to: '    source: "sentinel",',
+  },
+  {
+    id: "summary-sentinel-source-tag",
+    file: ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+    from: '    source: "sentinel",\n    sidecarType: null,',
+    to: '    source: "timeout",\n    sidecarType: null,',
+  },
+  {
+    id: "summary-ping-status",
+    file: ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+    from: '    status = "ping";',
+    to: '    status = "success";',
+  },
+  {
+    id: "summary-grace-gate",
+    file: ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+    from: "if (sidecarEnabled(launchId, stateDir) && sidecarGraceMs > 0) {",
+    to: "if (sidecarEnabled(launchId, stateDir) && sidecarGraceMs >= 0) {",
+  },
+  {
+    id: "summary-sidecar-enabled-guard",
+    file: ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+    from: "  return Boolean(launchId && stateDir);",
+    to: "  return Boolean(launchId || stateDir);",
+  },
+  {
     id: "mux-backend-preference",
     file: ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
     from: 'export const SUPPORTED_BACKENDS = ["cmux", "zellij", "tmux"];',

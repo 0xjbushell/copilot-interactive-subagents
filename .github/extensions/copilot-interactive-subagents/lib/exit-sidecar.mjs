@@ -19,7 +19,7 @@ export function resolveStateDir({ projectRoot } = {}) {
   return path.resolve(root, STATE_DIR_NAME);
 }
 
-function sidecarPath(stateDir, launchId) {
+export function sidecarPath(stateDir, launchId) {
   return path.join(stateDir, SIDECAR_DIRNAME, `${launchId}.json`);
 }
 
