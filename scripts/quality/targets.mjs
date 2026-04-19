@@ -324,6 +324,42 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: '    const isTerminalStatus = manifest.status === "success" || manifest.status === "failure" || manifest.status === "timeout";',
     to: '    const isTerminalStatus = manifest.status === "success" || manifest.status === "failed" || manifest.status === "timeout";',
   },
+  {
+    id: "utils-active-includes-ping",
+    file: ".github/extensions/copilot-interactive-subagents/lib/utils.mjs",
+    from: 'return status === "success" || status === "running" || status === "interactive" || status === "ping";',
+    to: 'return status === "success" || status === "running" || status === "interactive";',
+  },
+  {
+    id: "launch-summary-precedence-sidecar-wins",
+    file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+    from: '  if (completion.source === "sidecar" && completion.summary) {\n    return { summary: completion.summary, source: "sidecar" };\n  }',
+    to: '  if (false && completion.source === "sidecar" && completion.summary) {\n    return { summary: completion.summary, source: "sidecar" };\n  }',
+  },
+  {
+    id: "launch-manifest-sidecar-path-set",
+    file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+    from: '  if (completion.source === "sidecar") {\n    updates.sidecarPath = completion.sidecarPath;',
+    to: '  if (completion.source === "sidecar") {\n    updates.sidecarPath = null;',
+  },
+  {
+    id: "launch-manifest-ping-last-exit-type",
+    file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+    from: 'updates.lastExitType = completion.sidecarType === "ping" ? "ping" : "done";',
+    to: 'updates.lastExitType = "done";',
+  },
+  {
+    id: "launch-manifest-ping-history-append",
+    file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+    from: 'updates.pingHistory = [\n        ...(activeManifest.pingHistory ?? []),\n        { message: completion.message, sentAt: now() },\n      ];',
+    to: 'updates.pingHistory = [{ message: completion.message, sentAt: now() }];',
+  },
+  {
+    id: "launch-shape-ping-summary-null",
+    file: ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+    from: '    summary: null,\n    exitCode: 0,\n    ping: { message: completion.message },',
+    to: '    summary: "",\n    exitCode: 0,\n    ping: { message: completion.message },',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [

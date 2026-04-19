@@ -85,6 +85,8 @@ Returns launch metadata that Agent Skills can hand off or store:
 }
 ```
 
+When the child writes a `caller_ping` exit sidecar, the result carries `status: "ping"`, `summary: null`, `exitCode: 0`, and a `ping: { message }` payload. `ok` remains `true` (ping is a non-failure terminal state). Respond by calling `copilot_subagent_resume` with a `task` describing how to proceed.
+
 ### `copilot_subagent_parallel`
 
 Use a single backend for the entire batch.

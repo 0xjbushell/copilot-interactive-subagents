@@ -180,7 +180,14 @@ async function openPaneAndPersist({ plan, request, openPane, stateStore, stateIn
   };
 }
 
-function enrichCompletionSummary(completion, plan) {
+export function enrichCompletionSummary(completion, plan) {
+  // Precedence (D2.3 inversion): sidecar > pane scrape > session-events fallback.
+  if (completion.source === "sidecar" && completion.summary) {
+    return { summary: completion.summary, source: "sidecar" };
+  }
+  if (completion.source === "sentinel" && completion.summary) {
+    return { summary: completion.summary, source: completion.summarySource ?? "pane" };
+  }
   if (plan.copilotSessionId) {
     const sessionSummary = extractSessionSummary({
       copilotSessionId: plan.copilotSessionId,
@@ -190,7 +197,38 @@ function enrichCompletionSummary(completion, plan) {
       return { summary: sessionSummary.summary, source: sessionSummary.source };
     }
   }
-  return { summary: completion.summary, source: completion.summarySource };
+  return { summary: completion.summary ?? null, source: completion.summarySource ?? "fallback" };
+}
+
+export function buildManifestUpdates({ completion, completionSummary, activeManifest, now }) {
+  const updates = {
+    status: completion.status,
+    summary: completionSummary.summary,
+    exitCode: completion.exitCode,
+  };
+  if (completion.source === "sidecar") {
+    updates.sidecarPath = completion.sidecarPath;
+    updates.lastExitType = completion.sidecarType === "ping" ? "ping" : "done";
+    if (completion.sidecarType === "ping") {
+      updates.pingHistory = [
+        ...(activeManifest.pingHistory ?? []),
+        { message: completion.message, sentAt: now() },
+      ];
+    }
+  } else if (completion.source === "sentinel") {
+    updates.lastExitType = "done";
+  }
+  return updates;
+}
+
+export function shapePingResult({ baseResult, completion }) {
+  return {
+    ...baseResult,
+    status: "ping",
+    summary: null,
+    exitCode: 0,
+    ping: { message: completion.message },
+  };
 }
 
 async function runChildLaunch({
@@ -256,11 +294,11 @@ async function runChildLaunch({
 
   const completionWithSummary = enrichCompletionSummary(completion, plan);
 
-  const terminalManifest = await stateStore.updateLaunchRecord(plan.launchId, {
-    status: completion.status,
-    summary: completionWithSummary.summary,
-    exitCode: completion.exitCode,
+  const now = () => new Date().toISOString();
+  const updates = buildManifestUpdates({
+    completion, completionSummary: completionWithSummary, activeManifest, now,
   });
+  const terminalManifest = await stateStore.updateLaunchRecord(plan.launchId, updates);
   await updateLaunchIndexBestEffort({
     stateIndex,
     manifest: terminalManifest,
@@ -276,13 +314,16 @@ async function runChildLaunch({
     }
   }
 
-  return shapeLaunchResult({
+  const baseResult = shapeLaunchResult({
     manifest: terminalManifest,
     request,
     launchAction: plan.launchAction,
     paneVisible,
     summarySource: completionWithSummary.source,
   });
+  return completion.status === "ping"
+    ? shapePingResult({ baseResult, completion })
+    : baseResult;
 }
 
 async function handleLaunchError({

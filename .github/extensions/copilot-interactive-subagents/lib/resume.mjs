@@ -176,34 +176,62 @@ async function awaitResumeCompletion({
     sidecarGraceMs: request.sidecarGraceMs ?? 500,
   });
 
+  // Precedence (D2.3 inversion): sidecar > pane scrape > session-events fallback.
   let completionSummary = completion.summary;
   let completionSummarySource = completion.summarySource;
-  const sessionSummary = extractSessionSummary({
-    copilotSessionId: manifest.copilotSessionId,
-    sinceEventIndex: eventsBaseline,
-  });
-  if (sessionSummary.summary) {
-    completionSummary = sessionSummary.summary;
-    completionSummarySource = sessionSummary.source;
+  const sidecarWins = completion.source === "sidecar" && completion.summary;
+  const sentinelWins = completion.source === "sentinel" && completion.summary;
+  if (sidecarWins) {
+    completionSummary = completion.summary;
+    completionSummarySource = "sidecar";
+  } else if (sentinelWins) {
+    completionSummary = completion.summary;
+    completionSummarySource = completion.summarySource ?? "pane";
+  } else {
+    const sessionSummary = extractSessionSummary({
+      copilotSessionId: manifest.copilotSessionId,
+      sinceEventIndex: eventsBaseline,
+    });
+    if (sessionSummary.summary) {
+      completionSummary = sessionSummary.summary;
+      completionSummarySource = sessionSummary.source;
+    }
   }
 
-  const terminalManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, {
+  const now = () => new Date().toISOString();
+  const updates = {
     status: completion.status,
     summary: completionSummary,
     exitCode: completion.exitCode,
-  });
+  };
+  if (completion.source === "sidecar") {
+    updates.sidecarPath = completion.sidecarPath;
+    updates.lastExitType = completion.sidecarType === "ping" ? "ping" : "done";
+    if (completion.sidecarType === "ping") {
+      updates.pingHistory = [
+        ...(manifest.pingHistory ?? []),
+        { message: completion.message, sentAt: now() },
+      ];
+    }
+  } else if (completion.source === "sentinel") {
+    updates.lastExitType = "done";
+  }
+  const terminalManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, updates);
 
   const closePane = services.closePane ?? defaultClosePane;
   if (manifest.closePaneOnCompletion !== false) {
     try { closePane({ backend: manifest.backend, paneId: newPaneId }); } catch { /* best effort */ }
   }
 
-  return shapeResumeResult({
+  const baseResult = shapeResumeResult({
     manifest: terminalManifest,
     request,
     paneVisible: false,
     summarySource: completionSummarySource,
   });
+  return completion.status === "ping"
+    ? { ...baseResult, status: "ping", summary: null, exitCode: 0, ping: { message: completion.message } }
+    : baseResult;
 }
 
 async function openResumePane({ manifest, request, services }) {
