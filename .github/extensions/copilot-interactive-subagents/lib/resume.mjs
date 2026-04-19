@@ -1,5 +1,6 @@
 import {
   METADATA_VERSION,
+  assertSupportedMetadataVersion,
   buildResumePointer,
   isValidLaunchId,
   isSupportedBackend,
@@ -65,14 +66,9 @@ function validateManifest({ manifest, request }) {
     });
   }
 
-  if (manifest.metadataVersion !== METADATA_VERSION) {
-    return shapeResumeFailure({
-      code: "RESUME_UNSUPPORTED",
-      message: `Stored launch metadata version ${manifest.metadataVersion} is not supported by this resume implementation.`,
-      manifest,
-      request,
-    });
-  }
+  // Hard cutover (D1.2): throws MANIFEST_VERSION_UNSUPPORTED when version
+  // mismatches; SDK callers and withToolTimeout see the typed code.
+  assertSupportedMetadataVersion(manifest, { source: "manifest" });
 
   if (!manifest.backend || !manifest.agentIdentifier || !manifest.paneId) {
     return shapeResumeFailure({
@@ -276,7 +272,7 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
 
   try {
     // Step 2: Verify pane is dead (skip for terminal statuses — manifest is authoritative)
-    const isTerminalStatus = manifest.status === "success" || manifest.status === "failed" || manifest.status === "timeout";
+    const isTerminalStatus = manifest.status === "success" || manifest.status === "failure" || manifest.status === "timeout";
     if (!isTerminalStatus) {
       const probeSessionLiveness = services.probeSessionLiveness ?? defaultProbeSessionLiveness;
       if (probeSessionLiveness({ backend: manifest.backend, paneId: manifest.paneId, services })) {

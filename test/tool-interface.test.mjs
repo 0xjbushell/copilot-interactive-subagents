@@ -83,7 +83,7 @@ describe("generic tool interface and operator handoff", () => {
         summary: request.task,
         summarySource: "fallback",
         exitCode: null,
-        metadataVersion: 2,
+        metadataVersion: 3,
         resumePointer: null,
       }),
       continueParallelLaunch: async () => ({
@@ -104,7 +104,7 @@ describe("generic tool interface and operator handoff", () => {
         summary: "running",
         summarySource: "fallback",
         exitCode: null,
-        metadataVersion: 2,
+        metadataVersion: 3,
         resumePointer: null,
       }),
       continueSetTitle: async () => ({
@@ -268,7 +268,7 @@ describe("generic tool interface and operator handoff", () => {
             summary: entry.request.task,
             summarySource: "fallback",
             exitCode: null,
-            metadataVersion: 2,
+            metadataVersion: 3,
             resumePointer: null,
           })),
           progressByLaunchId: {},
@@ -289,7 +289,7 @@ describe("generic tool interface and operator handoff", () => {
           summary: "Resumed",
           summarySource: "fallback",
           exitCode: null,
-          metadataVersion: 2,
+          metadataVersion: 3,
           resumePointer: { launchId: payload.request.launchId },
         };
       },

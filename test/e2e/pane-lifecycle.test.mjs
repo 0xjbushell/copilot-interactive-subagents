@@ -129,7 +129,7 @@ function defineBackendSuite(backend) {
       // Verify manifest
       const manifest = await stateStore.readLaunchRecord(result.launchId);
       assert.ok(manifest.copilotSessionId, "Manifest should have copilotSessionId");
-      assert.equal(manifest.metadataVersion, 2, "Should be metadata v2");
+      assert.equal(manifest.metadataVersion, 3, "Should be metadata v2");
       assert.equal(manifest.agentIdentifier, "github-copilot");
       assert.equal(manifest.backend, backend);
       assert.equal(manifest.status, "success");

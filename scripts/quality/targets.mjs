@@ -222,6 +222,42 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: "    parts.push(`COPILOT_SUBAGENT_STATE_DIR=${shellEscape(request.stateDir)}`);",
     to: "    parts.push(`COPILOT_SUBAGENT_OTHER_DIR=${shellEscape(request.stateDir)}`);",
   },
+  {
+    id: "state-metadata-version-3",
+    file: ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+    from: "export const METADATA_VERSION = 3;",
+    to: "export const METADATA_VERSION = 2;",
+  },
+  {
+    id: "state-version-assert-code",
+    file: ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+    from: 'error.code = "MANIFEST_VERSION_UNSUPPORTED";',
+    to: 'error.code = "MANIFEST_OTHER_ERROR";',
+  },
+  {
+    id: "state-read-version-check",
+    file: ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+    from: '      assertSupportedMetadataVersion(parsed, { source: "manifest" });',
+    to: "      void parsed;",
+  },
+  {
+    id: "extension-tool-timeout-flag",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: "    if (!timedOut) {",
+    to: "    if (timedOut) {",
+  },
+  {
+    id: "resume-version-throw",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: "    assertSupportedMetadataVersion(manifest, { source: \"manifest\" });",
+    to: "    void manifest;",
+  },
+  {
+    id: "resume-failed-status-typo",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: '    const isTerminalStatus = manifest.status === "success" || manifest.status === "failure" || manifest.status === "timeout";',
+    to: '    const isTerminalStatus = manifest.status === "success" || manifest.status === "failed" || manifest.status === "timeout";',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [

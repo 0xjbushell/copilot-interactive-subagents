@@ -23,7 +23,7 @@ describe("fixtures", () => {
       for (const field of requiredFields) {
         assert.ok(field in manifest, `Missing field: ${field}`);
       }
-      assert.equal(manifest.metadataVersion, 2);
+      assert.equal(manifest.metadataVersion, 3);
       assert.equal(manifest.interactive, false);
       assert.equal(manifest.closePaneOnCompletion, true);
     });

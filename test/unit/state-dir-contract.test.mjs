@@ -53,7 +53,7 @@ describe("stateDir contract (D1.1 addendum)", () => {
           status: patch.status ?? "running",
           summary: patch.summary ?? null,
           exitCode: patch.exitCode ?? null,
-          metadataVersion: 2,
+          metadataVersion: 3,
           ...patch,
         }),
         readLaunchRecord: async () => null,
@@ -104,7 +104,7 @@ describe("stateDir contract (D1.1 addendum)", () => {
             launchId: "L1", agentIdentifier: "github-copilot", agentKind: "built-in",
             backend: "tmux", paneId: "%1", sessionId: null, requestedAt: "now",
             status: patch.status ?? "running", summary: null, exitCode: null,
-            metadataVersion: 2, ...patch,
+            metadataVersion: 3, ...patch,
           }),
           readLaunchRecord: async () => ({ copilotSessionId: "parent-cs" }),
         },
@@ -154,7 +154,7 @@ describe("stateDir contract (D1.1 addendum)", () => {
         status: "success",
         summary: "x",
         exitCode: 0,
-        metadataVersion: 2,
+        metadataVersion: 3,
         closePaneOnCompletion: false,
       };
 
@@ -196,7 +196,7 @@ describe("stateDir contract (D1.1 addendum)", () => {
       const manifest = {
         launchId: "L1", backend: "tmux", agentIdentifier: "github-copilot",
         agentKind: "built-in", paneId: "%1", sessionId: "s", copilotSessionId: "cs1",
-        status: "success", summary: "x", exitCode: 0, metadataVersion: 2,
+        status: "success", summary: "x", exitCode: 0, metadataVersion: 3,
         closePaneOnCompletion: false,
       };
       const services = {
@@ -233,7 +233,7 @@ describe("stateDir contract (D1.1 addendum)", () => {
         status: "success",
         summary: "x",
         exitCode: 0,
-        metadataVersion: 2,
+        metadataVersion: 3,
         closePaneOnCompletion: false,
       };
 

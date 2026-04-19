@@ -3,10 +3,22 @@ import path from "node:path";
 
 import { normalizeOptionalText, normalizeExitCode } from "./utils.mjs";
 
-export const METADATA_VERSION = 2;
+export const METADATA_VERSION = 3;
 export const LAUNCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
 const DEFAULT_STORE_DIRECTORY = path.join(".copilot-interactive-subagents", "launches");
+
+export function assertSupportedMetadataVersion(parsed, { source = "manifest" } = {}) {
+  const version = parsed?.metadataVersion;
+  if (version !== METADATA_VERSION) {
+    const error = new Error(
+      `Unsupported ${source} version: ${version} (expected ${METADATA_VERSION}). Hard cutover; no migration.`,
+    );
+    error.code = "MANIFEST_VERSION_UNSUPPORTED";
+    error.observedVersion = version;
+    throw error;
+  }
+}
 
 function resolveStoreRoot({ workspacePath, projectRoot = process.cwd(), storeDirectory = DEFAULT_STORE_DIRECTORY } = {}) {
   return path.resolve(workspacePath ?? projectRoot, storeDirectory);
@@ -63,6 +75,9 @@ export function createLaunchRecord({
   fork = null,
   closePaneOnCompletion = true,
   eventsBaseline = null,
+  pingHistory = [],
+  lastExitType = null,
+  sidecarPath = null,
 } = {}) {
   const validatedLaunchId = assertValidLaunchId(launchId);
   return {
@@ -82,6 +97,9 @@ export function createLaunchRecord({
     fork: fork ?? null,
     closePaneOnCompletion: closePaneOnCompletion !== false,
     eventsBaseline: eventsBaseline ?? null,
+    pingHistory: Array.isArray(pingHistory) ? [...pingHistory] : [],
+    lastExitType: lastExitType ?? null,
+    sidecarPath: sidecarPath ?? null,
   };
 }
 
@@ -113,7 +131,9 @@ export function createStateStore(options = {}) {
     },
     async readLaunchRecord(launchId) {
       const contents = await readFile(resolveManifestPath(launchId, options), "utf8");
-      return createLaunchRecord(JSON.parse(contents));
+      const parsed = JSON.parse(contents);
+      assertSupportedMetadataVersion(parsed, { source: "manifest" });
+      return createLaunchRecord(parsed);
     },
     async updateLaunchRecord(launchId, updates = {}) {
       const existing = await this.readLaunchRecord(launchId);

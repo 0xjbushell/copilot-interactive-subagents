@@ -56,7 +56,7 @@ describe("golden-path: autonomous launch → complete → resume → verify", ()
     const manifest = await store.readLaunchRecord(result.launchId);
     assert.equal(manifest.status, "success");
     assert.equal(manifest.exitCode, 0);
-    assert.equal(manifest.metadataVersion, 2);
+    assert.equal(manifest.metadataVersion, 3);
     assert.ok(manifest.copilotSessionId, "Should have copilotSessionId");
     assert.equal(manifest.interactive, false);
     assert.equal(manifest.closePaneOnCompletion, true);

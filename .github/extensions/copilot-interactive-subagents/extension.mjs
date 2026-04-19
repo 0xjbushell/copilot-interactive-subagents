@@ -358,20 +358,29 @@ function toToolResult(result) {
 
 const DEFAULT_TOOL_TIMEOUT_MS = 90_000;
 
-async function withToolTimeout(toolName, handler, args) {
+export async function withToolTimeout(toolName, handler, args) {
   let timer;
+  let timedOut = false;
   try {
     return await Promise.race([
       handler(args),
       new Promise((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`Tool ${toolName} timed out after ${DEFAULT_TOOL_TIMEOUT_MS}ms`)),
+          () => {
+            timedOut = true;
+            reject(new Error(`Tool ${toolName} timed out after ${DEFAULT_TOOL_TIMEOUT_MS}ms`));
+          },
           DEFAULT_TOOL_TIMEOUT_MS,
         );
         if (timer.unref) timer.unref();
       }),
     ]);
   } catch (error) {
+    if (!timedOut) {
+      // Non-timeout error: propagate with original code intact so SDK and
+      // tests see typed errors (e.g. MANIFEST_VERSION_UNSUPPORTED).
+      throw error;
+    }
     return toToolResult({
       ok: false,
       code: "TOOL_TIMEOUT",

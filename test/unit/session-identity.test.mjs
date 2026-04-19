@@ -52,7 +52,7 @@ describe("Session Identity (tracer bullet)", () => {
     );
 
     // v2 metadata
-    assert.equal(manifest.metadataVersion, 2);
+    assert.equal(manifest.metadataVersion, 3);
     assert.equal(manifest.interactive, false);
     assert.equal(manifest.fork, null);
     assert.equal(manifest.closePaneOnCompletion, true);
@@ -180,6 +180,6 @@ describe("Session Identity (tracer bullet)", () => {
     assert.deepEqual(readBack.fork, { sourceCopilotSessionId: "old-session" });
     assert.equal(readBack.closePaneOnCompletion, false);
     assert.equal(readBack.eventsBaseline, 42);
-    assert.equal(readBack.metadataVersion, 2);
+    assert.equal(readBack.metadataVersion, 3);
   });
 });

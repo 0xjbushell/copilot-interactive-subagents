@@ -49,7 +49,7 @@ export function createManifestV2(overrides = {}) {
     status: overrides.status ?? "pending",
     summary: overrides.summary ?? null,
     exitCode: overrides.exitCode ?? null,
-    metadataVersion: overrides.metadataVersion ?? 2,
+    metadataVersion: overrides.metadataVersion ?? 3,
     copilotSessionId: overrides.copilotSessionId ?? "test-uuid-0000-0000-0000-000000000001",
     interactive: overrides.interactive ?? false,
     fork: overrides.fork ?? null,
