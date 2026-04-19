@@ -482,14 +482,15 @@ Important constraint:
 
 ### `copilot_subagent_resume`
 
-Resumes a previously launched pane-backed session using `launchId` or `resumePointer`.
+Resumes a previously launched pane-backed session using `launchId` or `resumePointer`. Optional `task` field delivers a follow-up instruction to the resumed child as a launch prompt — useful for responding to a `caller_ping`. Empty string and omission are treated identically (no extra prompt delivered).
 
 Request:
 
 ```json
 {
   "launchId": "launch-001",
-  "awaitCompletion": false
+  "awaitCompletion": false,
+  "task": "please continue with the next step"
 }
 ```
 

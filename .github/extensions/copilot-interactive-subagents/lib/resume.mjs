@@ -207,12 +207,13 @@ async function awaitResumeCompletion({
 }
 
 async function openResumePane({ manifest, request, services }) {
+  const extraPrompt = (typeof request.task === "string" && request.task.length > 0) ? request.task : null;
   const openPaneAndSendCommand = services.openPaneAndSendCommand ?? request.openPaneAndSendCommand;
   if (typeof openPaneAndSendCommand === "function") {
     const result = await openPaneAndSendCommand({
       backend: manifest.backend,
       copilotSessionId: manifest.copilotSessionId,
-      task: request.task,
+      task: extraPrompt,
       request,
     });
     return { paneId: result?.paneId ?? manifest.paneId, sessionId: result?.sessionId ?? null };
@@ -228,7 +229,7 @@ async function openResumePane({ manifest, request, services }) {
       request,
       paneId: pane.paneId,
       agentIdentifier: manifest.agentIdentifier,
-      task: request.task ?? "",
+      task: extraPrompt,
       copilotSessionId: manifest.copilotSessionId,
       interactive: false,
     });

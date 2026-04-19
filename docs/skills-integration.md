@@ -143,14 +143,15 @@ Returns per-child result objects plus `aggregateStatus`:
 
 ### `copilot_subagent_resume`
 
-Resume from `launchId`, `resumeReference`, or `resumePointer`.
+Resume from `launchId`, `resumeReference`, or `resumePointer`. Optional `task` delivers a follow-up instruction to the resumed child as a launch prompt (use this to respond to a `caller_ping`). Empty string is treated as omitted.
 
 ```json
 {
   "resumeReference": {
     "launchId": "launch-001"
   },
-  "awaitCompletion": false
+  "awaitCompletion": false,
+  "task": "please continue with the next step"
 }
 ```
 

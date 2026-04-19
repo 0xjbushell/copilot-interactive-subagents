@@ -217,6 +217,18 @@ const DEFAULT_TARGETED_MUTANTS = [
     to: "  return Boolean(launchId || stateDir);",
   },
   {
+    id: "resume-task-empty-string-converge",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: 'const extraPrompt = (typeof request.task === "string" && request.task.length > 0) ? request.task : null;',
+    to: 'const extraPrompt = (typeof request.task === "string") ? request.task : null;',
+  },
+  {
+    id: "resume-task-typeof-guard",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: 'const extraPrompt = (typeof request.task === "string" && request.task.length > 0) ? request.task : null;',
+    to: 'const extraPrompt = request.task;',
+  },
+  {
     id: "mux-backend-preference",
     file: ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
     from: 'export const SUPPORTED_BACKENDS = ["cmux", "zellij", "tmux"];',

@@ -71,6 +71,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     requestShape: {
       launchId: "string (or resumeReference/resumePointer)",
       awaitCompletion: "boolean (optional, default true)",
+      task: "string (optional follow-up instruction; empty string === omitted, no extra prompt delivered)",
     },
     resultShape: {
       launchId: "string",
@@ -193,6 +194,10 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
         },
       },
       awaitCompletion: { type: "boolean" },
+      task: {
+        type: "string",
+        description: "Optional follow-up instruction delivered to the resumed child as a new launch prompt. Use this to respond to a caller_ping or to extend the child's work. Extension does NOT auto-prepend prior ping context — caller crafts the full task string.",
+      },
     },
   },
   copilot_subagent_set_title: {
