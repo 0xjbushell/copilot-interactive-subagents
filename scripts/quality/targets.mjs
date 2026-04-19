@@ -247,10 +247,34 @@ const DEFAULT_TARGETED_MUTANTS = [
     to: "    if (timedOut) {",
   },
   {
+    id: "extension-caller-ping-gate",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: "  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    tools.push({\n      name: \"caller_ping\",",
+    to: "  if (false) {\n    tools.push({\n      name: \"caller_ping\",",
+  },
+  {
+    id: "extension-caller-ping-type",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: "            type: \"ping\",\n            message,",
+    to: "            type: \"done\",\n            message,",
+  },
+  {
+    id: "extension-caller-ping-return-message",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: "Ping sent. Session is terminating. Do not call further tools. End your turn.",
+    to: "Ping sent.",
+  },
+  {
+    id: "extension-child-statedir-strict",
+    file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
+    from: "    error.code = \"STATE_DIR_MISSING\";\n    throw error;",
+    to: "    error.code = \"STATE_DIR_MISSING\";\n    return resolveStateDir({ projectRoot: process.cwd() });",
+  },
+  {
     id: "resume-version-throw",
     file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
-    from: "    assertSupportedMetadataVersion(manifest, { source: \"manifest\" });",
-    to: "    void manifest;",
+    from: "  assertSupportedMetadataVersion(manifest, { source: \"manifest\" });",
+    to: "  void manifest;",
   },
   {
     id: "resume-failed-status-typo",

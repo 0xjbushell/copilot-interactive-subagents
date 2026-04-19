@@ -28,6 +28,7 @@ import {
   defaultAttachBackendForRuntime,
   defaultStartBackendForRuntime,
 } from "./lib/backend-ops.mjs";
+import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
 import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_TOOL_DEFINITIONS,
@@ -476,6 +477,30 @@ export async function createExtensionHandlers(overrides = {}) {
   };
 }
 
+function buildChildToolServices(options) {
+  // The seam is fs-shaped (writeFileSync/mkdirSync/renameSync/now) for
+  // exit-sidecar IO, NOT the handler-factory shape. Tests inject overrides;
+  // production falls through to module defaults inside writeExitSidecar.
+  return options.childToolServices ?? {};
+}
+
+function resolveChildStateDir() {
+  // D1.1's contract: parent ALWAYS exports COPILOT_SUBAGENT_STATE_DIR alongside
+  // COPILOT_SUBAGENT_LAUNCH_ID. Fail loud on the fallback path so a silently
+  // misrouted sidecar doesn't drop on the floor.
+  const fromEnv = process.env.COPILOT_SUBAGENT_STATE_DIR;
+  if (fromEnv) return fromEnv;
+  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    const error = new Error(
+      "COPILOT_SUBAGENT_LAUNCH_ID is set but COPILOT_SUBAGENT_STATE_DIR is not. " +
+        "Parent must export both (D1.1 contract). Aborting child tool to prevent silent IPC loss.",
+    );
+    error.code = "STATE_DIR_MISSING";
+    throw error;
+  }
+  return resolveStateDir({ projectRoot: process.cwd() });
+}
+
 export async function registerExtensionSession(options = {}) {
   const joinSession =
     options.joinSession ?? (await import("@github/copilot-sdk/extension")).joinSession;
@@ -501,6 +526,48 @@ export async function registerExtensionSession(options = {}) {
   });
 
   const tools = buildSdkTools(handlers);
+
+  const childToolServices = buildChildToolServices(options);
+
+  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    tools.push({
+      name: "caller_ping",
+      description:
+        "Pause your work and notify the parent caller that you need input. After calling this, end your turn — your session will terminate and the parent will resume you with a follow-up task.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "What you need from the parent (a question, a blocker, or a status update).",
+          },
+        },
+        required: ["message"],
+      },
+      handler: ({ message } = {}) => {
+        const launchId = process.env.COPILOT_SUBAGENT_LAUNCH_ID;
+        try {
+          writeExitSidecar({
+            launchId,
+            type: "ping",
+            message,
+            stateDir: resolveChildStateDir(),
+            services: childToolServices,
+          });
+        } catch (err) {
+          // Best-effort shutdown contract (spec line 163): the model relies on
+          // the verbatim return string to end its turn. On IO failure surface
+          // the error in stderr but DO NOT fail the tool — otherwise the model
+          // keeps calling tools instead of yielding.
+          process.stderr.write(`caller_ping: sidecar write failed: ${err?.message ?? err}\n`);
+        }
+        return {
+          ok: true,
+          message: "Ping sent. Session is terminating. Do not call further tools. End your turn.",
+        };
+      },
+    });
+  }
 
   if (process.env.COPILOT_SUBAGENT_SESSION_ID) {
     tools.push({

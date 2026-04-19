@@ -222,3 +222,7 @@ export const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_resume: "copilotSubagentResume",
   copilot_subagent_set_title: "copilotSubagentSetTitle",
 };
+
+// D2.1: name constant only (runtime tool def lives inline in extension.mjs).
+// Used by D4.1's child-only filter set.
+export const CALLER_PING_TOOL_NAME = "caller_ping";
