@@ -384,6 +384,24 @@ const DEFAULT_TARGETED_MUTANTS = [
     from: '          message: "Session is terminating. Do not call further tools. End your turn.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
     to: '          message: "Task marked complete. Session ending.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
   },
+  {
+    id: "resume-d25-ping-cleanup-gate",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: 'if (manifest.lastExitType === "ping") {',
+    to: 'if (manifest.lastExitType === "done") {',
+  },
+  {
+    id: "resume-d25-ping-history-respondedAt",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: 'respondedAt: services.now?.() ?? new Date().toISOString(),',
+    to: 'respondedAt: null,',
+  },
+  {
+    id: "resume-d25-reset-last-exit-type",
+    file: ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+    from: 'pingHistory,\n        lastExitType: null,',
+    to: 'pingHistory,\n        lastExitType: "ping",',
+  },
 ];
 
 export const RESUME_TARGETED_MUTANTS = [

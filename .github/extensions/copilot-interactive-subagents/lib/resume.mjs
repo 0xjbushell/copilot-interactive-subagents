@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
 import { isActiveOrSuccessful, normalizeNonEmptyString, countNonEmptyLines } from "./utils.mjs";
-import { resolveStateDir } from "./exit-sidecar.mjs";
+import { resolveStateDir, deleteExitSidecar as defaultDeleteExitSidecar } from "./exit-sidecar.mjs";
 
 function resolveLaunchId(request = {}) {
   return normalizeNonEmptyString(request.launchId)
@@ -327,6 +327,26 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
 
     // Step 4: Clean up stale signal file
     cleanupStaleSignalFile({ copilotSessionId: manifest.copilotSessionId, stateDir: request.stateDir, services });
+
+    // Step 4b (D2.5): if previous exit was a ping, delete its sidecar + mark respondedAt + reset lastExitType.
+    if (manifest.lastExitType === "ping") {
+      const deleteSidecar = services.deleteExitSidecar ?? defaultDeleteExitSidecar;
+      try {
+        deleteSidecar({ launchId: manifest.launchId, stateDir: request.stateDir, services });
+      } catch { /* best effort: stale sidecar removal must not block resume */ }
+      const pingHistory = [...(manifest.pingHistory ?? [])];
+      if (pingHistory.length > 0) {
+        const last = pingHistory[pingHistory.length - 1];
+        pingHistory[pingHistory.length - 1] = {
+          ...last,
+          respondedAt: services.now?.() ?? new Date().toISOString(),
+        };
+      }
+      await plan.stateStore.updateLaunchRecord(plan.launchId, {
+        pingHistory,
+        lastExitType: null,
+      });
+    }
 
     // Step 5: Open new pane + send resume command
     const resumePane = await openResumePane({ manifest, request, services });
