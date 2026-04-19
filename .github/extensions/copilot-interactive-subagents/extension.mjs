@@ -20,7 +20,6 @@ import { uniqueStable } from "./lib/utils.mjs";
 import {
   resolveCommandPath,
   createDefaultAgentLaunchCommand,
-  writeSignalFile,
   defaultOpenPane,
   defaultLaunchAgentInPane,
   defaultReadPaneOutput,
@@ -48,7 +47,7 @@ import {
 } from "./lib/validation.mjs";
 
 // Re-export for backward compatibility (tests import these from extension.mjs)
-export { createDefaultAgentLaunchCommand, writeSignalFile };
+export { createDefaultAgentLaunchCommand };
 export { PUBLIC_TOOL_NAMES, PUBLIC_TOOL_DEFINITIONS, PUBLIC_TOOL_PARAMETER_SCHEMAS };
 
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];

@@ -5,53 +5,6 @@ import { importProjectModule } from "../helpers/red-harness.mjs";
 const EXT_PATH = ".github/extensions/copilot-interactive-subagents/extension.mjs";
 
 describe("Explicit completion (subagent_done)", () => {
-  describe("writeSignalFile", () => {
-    it("GIVEN copilotSessionId and launchId WHEN called THEN writes signal file with timestamp|launchId", async () => {
-      const { writeSignalFile } = await importProjectModule(EXT_PATH, ["writeSignalFile"]);
-      const written = {};
-      const services = {
-        mkdirSync: (dir, opts) => { written.dir = dir; written.opts = opts; },
-        writeFileSync: (filePath, content) => { written.path = filePath; written.content = content; },
-        now: () => 1700000000000,
-      };
-      writeSignalFile({
-        copilotSessionId: "session-abc",
-        launchId: "launch-xyz",
-        stateDir: "/tmp/test-state",
-        services,
-      });
-      assert.ok(written.dir.includes("done"));
-      assert.ok(written.opts.recursive);
-      assert.ok(written.path.endsWith("session-abc"));
-      assert.equal(written.content, "1700000000000|launch-xyz");
-    });
-
-    it("GIVEN no launchId WHEN called THEN uses 'unknown' in content", async () => {
-      const { writeSignalFile } = await importProjectModule(EXT_PATH, ["writeSignalFile"]);
-      let content;
-      const services = {
-        mkdirSync: () => {},
-        writeFileSync: (_, c) => { content = c; },
-        now: () => 42,
-      };
-      writeSignalFile({ copilotSessionId: "s1", services });
-      assert.equal(content, "42|unknown");
-    });
-
-    it("GIVEN default stateDir WHEN called THEN uses .copilot-interactive-subagents", async () => {
-      const { writeSignalFile } = await importProjectModule(EXT_PATH, ["writeSignalFile"]);
-      let dir;
-      const services = {
-        mkdirSync: (d) => { dir = d; },
-        writeFileSync: () => {},
-        now: () => 0,
-      };
-      writeSignalFile({ copilotSessionId: "s1", services });
-      assert.ok(dir.includes(".copilot-interactive-subagents"));
-      assert.ok(dir.includes("done"));
-    });
-  });
-
   describe("subagent_done tool registration", () => {
     it("GIVEN COPILOT_SUBAGENT_LAUNCH_ID set WHEN session registers THEN subagent_done tool is included with optional summary parameter", async () => {
       const { registerExtensionSession } = await importProjectModule(EXT_PATH, ["registerExtensionSession"]);

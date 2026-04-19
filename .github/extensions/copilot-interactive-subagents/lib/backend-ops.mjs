@@ -255,16 +255,6 @@ export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = 
   return [...envParts, `node -e ${shellEscape(runnerScript)}`].join(" ");
 }
 
-export function writeSignalFile({ copilotSessionId, launchId, stateDir, services = {} } = {}) {
-  const mkdirSync = services.mkdirSync ?? defaultMkdirSync;
-  const writeFileSync = services.writeFileSync ?? defaultWriteFileSync;
-  const now = services.now ?? Date.now;
-  const baseDir = stateDir ?? ".copilot-interactive-subagents";
-  const signalDir = path.join(baseDir, "done");
-  mkdirSync(signalDir, { recursive: true });
-  writeFileSync(path.join(signalDir, copilotSessionId), `${now()}|${launchId ?? "unknown"}`);
-}
-
 export async function defaultOpenPane({ backend, request, runtimeServices = {}, ...context }) {
   const openPane = resolveLaunchRuntimeOperation(request, backend, "openPane");
   if (openPane) {

@@ -9,7 +9,7 @@ import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } 
 import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
 import { probeSessionLiveness as defaultProbeSessionLiveness } from "./mux.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
-import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } from "node:fs";
+import { readFileSync as defaultReadFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
@@ -138,12 +138,6 @@ function shapeResumeResult({ manifest, request, paneVisible, summarySource }) {
       projectRoot: request.projectRoot,
     }),
   };
-}
-
-function cleanupStaleSignalFile({ copilotSessionId, stateDir, services = {} }) {
-  const unlinkSync = services.unlinkSync ?? defaultUnlinkSync;
-  const baseDir = stateDir ?? ".copilot-interactive-subagents";
-  try { unlinkSync(join(baseDir, "done", copilotSessionId)); } catch { /* not present */ }
 }
 
 function countSessionEvents({ copilotSessionId, copilotHome, services = {} }) {
@@ -325,8 +319,7 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
       services,
     });
 
-    // Step 4: Clean up stale signal file
-    cleanupStaleSignalFile({ copilotSessionId: manifest.copilotSessionId, stateDir: request.stateDir, services });
+    // Step 4 (D5.2): legacy signal file no longer exists; nothing to clean up.
 
     // Step 4b (D2.5): if previous exit was a ping, delete its sidecar + mark respondedAt + reset lastExitType.
     if (manifest.lastExitType === "ping") {
