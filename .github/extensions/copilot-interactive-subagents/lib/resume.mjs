@@ -5,7 +5,8 @@ import {
   isValidLaunchId,
   isSupportedBackend,
 } from "./state.mjs";
-import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { extractLaunchSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { enrichCompletionSummary, buildManifestUpdates, shapePingResult } from "./launch.mjs";
 import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
 import { probeSessionLiveness as defaultProbeSessionLiveness } from "./mux.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
@@ -171,45 +172,21 @@ async function awaitResumeCompletion({
   });
 
   // Precedence (D2.3 inversion): sidecar > pane scrape > session-events fallback.
-  let completionSummary = completion.summary;
-  let completionSummarySource = completion.summarySource;
-  const sidecarWins = completion.source === "sidecar" && completion.summary;
-  const sentinelWins = completion.source === "sentinel" && completion.summary;
-  if (sidecarWins) {
-    completionSummary = completion.summary;
-    completionSummarySource = "sidecar";
-  } else if (sentinelWins) {
-    completionSummary = completion.summary;
-    completionSummarySource = completion.summarySource ?? "pane";
-  } else {
-    const sessionSummary = extractSessionSummary({
-      copilotSessionId: manifest.copilotSessionId,
-      sinceEventIndex: eventsBaseline,
-    });
-    if (sessionSummary.summary) {
-      completionSummary = sessionSummary.summary;
-      completionSummarySource = sessionSummary.source;
-    }
-  }
+  // Shared with initial-launch path via launch.mjs#enrichCompletionSummary.
+  const enriched = enrichCompletionSummary(completion, {
+    copilotSessionId: manifest.copilotSessionId,
+    eventsBaseline,
+  });
+  const completionSummary = enriched.summary;
+  const completionSummarySource = enriched.source;
 
   const now = () => new Date().toISOString();
-  const updates = {
-    status: completion.status,
-    summary: completionSummary,
-    exitCode: completion.exitCode,
-  };
-  if (completion.source === "sidecar") {
-    updates.sidecarPath = completion.sidecarPath;
-    updates.lastExitType = completion.sidecarType === "ping" ? "ping" : "done";
-    if (completion.sidecarType === "ping") {
-      updates.pingHistory = [
-        ...(manifest.pingHistory ?? []),
-        { message: completion.message, sentAt: now() },
-      ];
-    }
-  } else if (completion.source === "sentinel") {
-    updates.lastExitType = "done";
-  }
+  const updates = buildManifestUpdates({
+    completion,
+    completionSummary: enriched,
+    activeManifest: manifest,
+    now,
+  });
   const terminalManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, updates);
 
   const closePane = services.closePane ?? defaultClosePane;
@@ -224,7 +201,7 @@ async function awaitResumeCompletion({
     summarySource: completionSummarySource,
   });
   return completion.status === "ping"
-    ? { ...baseResult, status: "ping", summary: null, exitCode: 0, ping: { message: completion.message } }
+    ? shapePingResult({ baseResult, completion })
     : baseResult;
 }
 

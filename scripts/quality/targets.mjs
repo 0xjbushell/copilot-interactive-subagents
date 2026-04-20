@@ -207,8 +207,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "summary-grace-gate",
     file: ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
-    from: "if (sidecarEnabled(launchId, stateDir) && sidecarGraceMs > 0) {",
-    to: "if (sidecarEnabled(launchId, stateDir) && sidecarGraceMs >= 0) {",
+    from: "if (!sidecarEnabled(launchId, stateDir) || sidecarGraceMs <= 0) return null;",
+    to: "if (!sidecarEnabled(launchId, stateDir) || sidecarGraceMs < 0) return null;",
   },
   {
     id: "summary-sidecar-enabled-guard",

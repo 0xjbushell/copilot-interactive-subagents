@@ -221,28 +221,39 @@ function sidecarEnabled(launchId, stateDir) {
   return Boolean(launchId && stateDir);
 }
 
+async function tryBuildSidecarCompletion({
+  launchId, stateDir, sidecarServices,
+  latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
+}) {
+  const parsed = await tryReadSidecar({ launchId, stateDir, services: sidecarServices });
+  if (!parsed) return null;
+  return buildSidecarCompletion({
+    launchId, stateDir, parsed,
+    latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
+  });
+}
+
 async function resolveSidecarSentinel({
   launchId, stateDir, sidecarServices, sidecarGraceMs, sleep,
   latestOutput, observation, agentIdentifier, backend, paneId, sessionId, log,
 }) {
-  const lateSidecar = await tryReadSidecar({ launchId, stateDir, services: sidecarServices });
-  if (lateSidecar) {
+  const ctx = {
+    launchId, stateDir, sidecarServices,
+    latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
+  };
+
+  const immediate = await tryBuildSidecarCompletion(ctx);
+  if (immediate) {
     log({ event: "summary.resolved", source: "sidecar", launchId });
-    return buildSidecarCompletion({
-      launchId, stateDir, parsed: lateSidecar,
-      latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
-    });
+    return immediate;
   }
-  if (sidecarEnabled(launchId, stateDir) && sidecarGraceMs > 0) {
-    await sleep(sidecarGraceMs);
-    const gracedSidecar = await tryReadSidecar({ launchId, stateDir, services: sidecarServices });
-    if (gracedSidecar) {
-      log({ event: "summary.resolved", source: "sidecar", launchId });
-      return buildSidecarCompletion({
-        launchId, stateDir, parsed: gracedSidecar,
-        latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
-      });
-    }
+
+  if (!sidecarEnabled(launchId, stateDir) || sidecarGraceMs <= 0) return null;
+  await sleep(sidecarGraceMs);
+  const graced = await tryBuildSidecarCompletion(ctx);
+  if (graced) {
+    log({ event: "summary.resolved", source: "sidecar", launchId });
+    return graced;
   }
   return null;
 }
