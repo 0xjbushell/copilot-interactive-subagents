@@ -92,7 +92,29 @@ Read `references/e2e-runbook.md` before running E2E — it covers the deploy-fir
 - `omc:test-run` confirms independently
 - Optionally: `omc:code-review` clears craftsmanship/security review
 
-## Conventions That Catch Real Bugs
+## Post-Implementation: Code Simplification Pass
+
+Run a simplification pass after all deliverables land and before tagging a release. Evidence from the v2 cycle: the initial implementation was 68 lines longer than it needed to be; a two-pass sweep produced a net −60-line diff with zero behavior change and all gates still green.
+
+**How to run it:**
+
+1. Invoke the `code-simplifier` skill and scope it to this PR's diff (`git diff main..feat/<branch> --stat`).
+2. Look for the three recurring patterns that appeared during v2:
+   - **Cross-module duplication** — helpers extracted for one code path that a sibling path reimplements inline. Example: `launch.mjs#enrichCompletionSummary` / `buildManifestUpdates` / `shapePingResult` were used in the launch path but reinvented in `resume.mjs#awaitResumeCompletion`.
+   - **Adjacent identical condition gates** — multiple `if (process.env.SAME_VAR) { … }` blocks that can collapse into one. Example: extension.mjs had three separate child-only gates.
+   - **Dead-code markers** — `void someVar` or commented-out fallbacks that were kept "just in case" and never earn their keep.
+3. Apply surgical edits (one concept per edit), re-run the gates after each.
+4. When an edit moves a line that a mutant anchored on, the mutation runner throws `Mutation snippet not found`. See `references/quality-gates.md#maintaining-mutants-through-refactors` for the recipe.
+
+**Done-criteria for the simplification pass:**
+
+- All three quality gates still green
+- E2E still green on both backends
+- The resulting diff is net-negative in production code lines (or at worst neutral, with measurably flatter nesting / fewer branches)
+
+If a simplification would hurt clarity (denser chains, clever one-liners, premature abstractions), **do not apply it**. Brevity is not the goal; eliminating unjustified duplication and dead weight is.
+
+
 
 - **Commit-message gotcha**: literal "kill" word triggers a security filter — write "killed" / "terminate".
 - **Use the `task` tool, not `copilot_subagent_*`**, for build-time delegation. The subagent extension is the very thing under development; relying on it during a refactor risks self-breakage.
