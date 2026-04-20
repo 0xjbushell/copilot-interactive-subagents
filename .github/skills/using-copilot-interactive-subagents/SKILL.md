@@ -7,6 +7,8 @@ description: "Teach Copilot agents how to delegate work through the copilot-inte
 
 Use this skill when the repository has the `copilot-interactive-subagents` extension available and the task benefits from visible pane-backed delegation instead of hidden background execution.
 
+> Spec: `specs/subagents/interactive-subagents-v2.md` (extension repo). Locked decisions: `specs/decisions/interactive-subagents-v2-decisions.md`.
+
 ## Capabilities
 
 - **5 parent tools**: `list_agents`, `launch`, `parallel`, `resume`, `set_title`
@@ -111,13 +113,11 @@ Aggregation rules:
 
 | Individual statuses | aggregateStatus |
 |---|---|
-| all `success` | `success` |
-| all `success` or `ping` | `success` |
-| mixed `success` + `ping` + at least one `failure`/`timeout`/`cancelled` | `partial-success` |
-| any `success` or `ping` present + other non-success terminals | `partial-success` |
-| all `cancelled` | `cancelled` |
-| all `timeout` | `timeout` |
-| otherwise | `failure` |
+| all `success` and/or `ping` | `success` |
+| at least one `success`/`ping` AND at least one `failure`/`timeout`/`cancelled` | `partial-success` |
+| all `cancelled` (and no success/ping) | `cancelled` |
+| all `timeout` (and no success/ping) | `timeout` |
+| otherwise (e.g. all `failure`, mixed terminal failures) | `failure` |
 
 Snapshot fields include `successCount`, `pingCount`, `failureCount` (failureCount excludes pending/running/interactive/success/ping).
 
