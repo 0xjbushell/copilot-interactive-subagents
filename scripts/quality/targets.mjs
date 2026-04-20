@@ -291,8 +291,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "extension-caller-ping-gate",
     file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
-    from: "  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    tools.push({\n      name: \"caller_ping\",",
-    to: "  if (false) {\n    tools.push({\n      name: \"caller_ping\",",
+    from: '      name: "caller_ping",',
+    to: '      name: "caller_xping",',
   },
   {
     id: "extension-caller-ping-type",
@@ -363,8 +363,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "subagent-done-gate-launch-id",
     file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
-    from: '  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    tools.push({\n      name: "subagent_done",',
-    to: '  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    tools.push({\n      name: "subagent_done",',
+    from: '      name: "subagent_done",',
+    to: '      name: "subagent_xdone",',
   },
   {
     id: "subagent-done-sidecar-type-done",
@@ -423,14 +423,14 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "progress-snapshot-failure-excludes-ping",
     file: ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
-    from: 'failureCount: results.filter((result) => !["pending", "running", "interactive", "success", "ping"].includes(result.status)).length,',
-    to: 'failureCount: results.filter((result) => !["pending", "running", "interactive", "success"].includes(result.status)).length,',
+    from: "failureCount: results.filter((result) => !NON_FAILURE_STATUSES.has(result.status)).length,",
+    to: "failureCount: results.filter((result) => NON_FAILURE_STATUSES.has(result.status)).length,",
   },
   {
     id: "extension-d41-child-filter-gate",
     file: ".github/extensions/copilot-interactive-subagents/extension.mjs",
-    from: '  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));\n  }',
-    to: '  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));\n  }',
+    from: "  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    // The childToolServices seam",
+    to: "  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    // The childToolServices seam",
   },
   {
     id: "extension-d41-child-filter-applied",

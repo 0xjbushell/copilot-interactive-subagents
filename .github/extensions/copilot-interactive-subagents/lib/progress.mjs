@@ -1,5 +1,6 @@
 const TERMINAL_STATUSES = new Set(["success", "failure", "cancelled", "timeout", "ping"]);
 const NON_FAILURE_TERMINAL = new Set(["success", "ping"]);
+const NON_FAILURE_STATUSES = new Set(["pending", "running", "interactive", "success", "ping"]);
 
 function cloneRecord(record) {
   return {
@@ -42,7 +43,6 @@ export function deriveAggregateStatus(results = []) {
     return "running";
   }
 
-  const successCount = results.filter((result) => result.status === "success").length;
   const nonFailureTerminal = results.filter((result) => NON_FAILURE_TERMINAL.has(result.status)).length;
   if (nonFailureTerminal === results.length) {
     return "success";
@@ -51,9 +51,6 @@ export function deriveAggregateStatus(results = []) {
   if (nonFailureTerminal > 0) {
     return "partial-success";
   }
-
-  // Suppress "no longer used directly" — kept for callers that diff successCount via snapshot.
-  void successCount;
 
   if (results.every((result) => result.status === "cancelled")) {
     return "cancelled";
@@ -104,7 +101,7 @@ export function createParallelProgressTracker({ launches = [] } = {}) {
       pendingCount: results.filter((result) => result.status === "pending").length,
       successCount: results.filter((result) => result.status === "success").length,
       pingCount: results.filter((result) => result.status === "ping").length,
-      failureCount: results.filter((result) => !["pending", "running", "interactive", "success", "ping"].includes(result.status)).length,
+      failureCount: results.filter((result) => !NON_FAILURE_STATUSES.has(result.status)).length,
       results,
       progressByLaunchId,
     };

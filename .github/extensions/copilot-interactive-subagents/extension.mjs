@@ -477,13 +477,6 @@ export async function createExtensionHandlers(overrides = {}) {
   };
 }
 
-function buildChildToolServices(options) {
-  // The seam is fs-shaped (writeFileSync/mkdirSync/renameSync/now) for
-  // exit-sidecar IO, NOT the handler-factory shape. Tests inject overrides;
-  // production falls through to module defaults inside writeExitSidecar.
-  return options.childToolServices ?? {};
-}
-
 function resolveChildStateDir() {
   // D1.1's contract: parent ALWAYS exports COPILOT_SUBAGENT_STATE_DIR alongside
   // COPILOT_SUBAGENT_LAUNCH_ID. Fail loud on the fallback path so a silently
@@ -527,15 +520,18 @@ export async function registerExtensionSession(options = {}) {
 
   let tools = buildSdkTools(handlers);
 
-  // D4.1: strip parent-only spawning tools when running inside a child session.
-  // Filter happens AFTER alias expansion so camelCase aliases are also caught.
+  // D4.1 + caller_ping + subagent_done: all child-only behavior gates on
+  // COPILOT_SUBAGENT_LAUNCH_ID. Single block so the contract is obvious.
   if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    // The childToolServices seam is fs-shaped (writeFileSync/mkdirSync/
+    // renameSync/now) for exit-sidecar IO. Tests inject overrides; production
+    // falls through to module defaults inside writeExitSidecar.
+    const childToolServices = options.childToolServices ?? {};
+
+    // Strip parent-only spawning tools. Filter happens AFTER alias expansion
+    // so camelCase aliases are also caught.
     tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));
-  }
 
-  const childToolServices = buildChildToolServices(options);
-
-  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
     tools.push({
       name: "caller_ping",
       description:
@@ -573,9 +569,7 @@ export async function registerExtensionSession(options = {}) {
         };
       },
     });
-  }
 
-  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
     tools.push({
       name: "subagent_done",
       description:
