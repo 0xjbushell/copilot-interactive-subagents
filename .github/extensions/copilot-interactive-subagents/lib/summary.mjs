@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 
 import { normalizeOptionalText } from "./utils.mjs";
+import { readExitSidecar, sidecarPath } from "./exit-sidecar.mjs";
 
 const SENTINEL_PATTERN = /__SUBAGENT_DONE_(-?\d+)__/;
 const DEFAULT_POLL_INTERVAL_MS = 500;
@@ -167,7 +168,194 @@ export function extractSessionSummary({
   return { summary: null, source: sinceEventIndex != null ? "events.jsonl" : "fallback", lastEventIndex: totalEvents };
 }
 
+function buildSidecarCompletion({ launchId, stateDir, parsed, latestOutput, observation, agentIdentifier, backend, paneId, sessionId }) {
+  const sidecarType = parsed.type;
+  const sidecarSummary = sidecarType === "done" ? normalizeOptionalText(parsed.summary) : null;
+  const sidecarMessage = sidecarType === "ping" ? normalizeOptionalText(parsed.message) : null;
+  const sidecarExitCode = sidecarType === "done" ? (parsed.exitCode ?? null) : 0;
+  let status;
+  if (sidecarType === "ping") {
+    status = "ping";
+  } else {
+    status = mapExitState({
+      exitCode: sidecarExitCode,
+      cancelled: Boolean(observation?.cancelled),
+      timedOut: Boolean(observation?.timedOut),
+    });
+  }
+  // Summary precedence: sidecar.summary > pane scrape > fallback
+  let summary = sidecarSummary;
+  let summarySource = "sidecar";
+  if (!summary) {
+    const scraped = extractLaunchSummary({
+      persistedExplicitSummary: observation?.persistedExplicitSummary ?? observation?.summary,
+      paneOutput: latestOutput,
+      agentIdentifier, backend, paneId, sessionId, status, exitCode: sidecarExitCode,
+    });
+    summary = scraped.summary;
+    summarySource = scraped.source;
+  }
+  return {
+    source: "sidecar",
+    sidecarType,
+    sidecarPath: sidecarPath(stateDir, launchId),
+    message: sidecarMessage,
+    status,
+    exitCode: sidecarExitCode,
+    summary,
+    summarySource,
+    paneOutput: latestOutput,
+  };
+}
+
+async function tryReadSidecar({ launchId, stateDir, services }) {
+  if (!launchId || !stateDir) return null;
+  try {
+    return readExitSidecar({ launchId, stateDir, services });
+  } catch {
+    return null;
+  }
+}
+
+function sidecarEnabled(launchId, stateDir) {
+  return Boolean(launchId && stateDir);
+}
+
+async function tryBuildSidecarCompletion({
+  launchId, stateDir, sidecarServices,
+  latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
+}) {
+  const parsed = await tryReadSidecar({ launchId, stateDir, services: sidecarServices });
+  if (!parsed) return null;
+  return buildSidecarCompletion({
+    launchId, stateDir, parsed,
+    latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
+  });
+}
+
+async function resolveSidecarSentinel({
+  launchId, stateDir, sidecarServices, sidecarGraceMs, sleep,
+  latestOutput, observation, agentIdentifier, backend, paneId, sessionId, log,
+}) {
+  const ctx = {
+    launchId, stateDir, sidecarServices,
+    latestOutput, observation, agentIdentifier, backend, paneId, sessionId,
+  };
+
+  const immediate = await tryBuildSidecarCompletion(ctx);
+  if (immediate) {
+    log({ event: "summary.resolved", source: "sidecar", launchId });
+    return immediate;
+  }
+
+  if (!sidecarEnabled(launchId, stateDir) || sidecarGraceMs <= 0) return null;
+  await sleep(sidecarGraceMs);
+  const graced = await tryBuildSidecarCompletion(ctx);
+  if (graced) {
+    log({ event: "summary.resolved", source: "sidecar", launchId });
+    return graced;
+  }
+  return null;
+}
+
+async function buildSentinelCompletion({
+  sentinel, latestOutput, observation,
+  readChildSessionState, request,
+  agentIdentifier, backend, paneId, sessionId, launchId, log,
+}) {
+  const persistedChildState = typeof readChildSessionState === "function"
+    ? await readChildSessionState({ backend, paneId, sessionId, agentIdentifier, request })
+    : null;
+  const status = mapExitState({
+    exitCode: sentinel.exitCode,
+    cancelled: Boolean(observation.cancelled),
+    timedOut: Boolean(observation.timedOut),
+  });
+  const summary = extractLaunchSummary({
+    persistedExplicitSummary:
+      observation.persistedExplicitSummary ??
+      observation.summary ??
+      persistedChildState?.summary,
+    paneOutput: latestOutput,
+    agentIdentifier, backend, paneId, sessionId, status, exitCode: sentinel.exitCode,
+  });
+  log({ event: "summary.resolved", source: "sentinel", launchId });
+  return {
+    source: "sentinel",
+    sidecarType: null,
+    sidecarPath: null,
+    message: null,
+    status,
+    exitCode: sentinel.exitCode,
+    summary: summary.summary,
+    summarySource: summary.source,
+    paneOutput: latestOutput,
+  };
+}
+
+function buildTimeoutCompletion({ launchId, latestOutput, latestObservation, agentIdentifier, backend, paneId, sessionId, log }) {
+  const summary = extractLaunchSummary({
+    persistedExplicitSummary: latestObservation.persistedExplicitSummary ?? latestObservation.summary,
+    paneOutput: latestOutput,
+    agentIdentifier, backend, paneId, sessionId, status: "timeout", exitCode: null,
+  });
+  log({ event: "summary.resolved", source: "timeout", launchId });
+  return {
+    source: "timeout",
+    sidecarType: null,
+    sidecarPath: null,
+    message: null,
+    status: "timeout",
+    exitCode: null,
+    summary: summary.summary,
+    summarySource: summary.source,
+    paneOutput: latestOutput,
+  };
+}
+
+async function runMonitorTick({
+  attempt, launchId, stateDir, sidecarServices, sidecarGraceMs, sleep,
+  request, readPaneOutput, readChildSessionState,
+  agentIdentifier, backend, paneId, sessionId, log, latestOutput, latestObservation,
+}) {
+  const earlySidecar = await tryReadSidecar({ launchId, stateDir, services: sidecarServices });
+  if (earlySidecar) {
+    log({ event: "summary.resolved", source: "sidecar", launchId });
+    return {
+      result: buildSidecarCompletion({
+        launchId, stateDir, parsed: earlySidecar,
+        latestOutput, observation: latestObservation,
+        agentIdentifier, backend, paneId, sessionId,
+      }),
+    };
+  }
+
+  const observation = (await readPaneOutput({
+    backend, paneId, sessionId, agentIdentifier, request, attempt,
+  })) ?? {};
+  const output = observation.output ?? latestOutput;
+
+  const sentinel = detectExitSentinel(output);
+  if (!sentinel) return { observation, output };
+
+  const sidecarResult = await resolveSidecarSentinel({
+    launchId, stateDir, sidecarServices, sidecarGraceMs, sleep,
+    latestOutput: output, observation,
+    agentIdentifier, backend, paneId, sessionId, log,
+  });
+  if (sidecarResult) return { result: sidecarResult };
+  return {
+    result: await buildSentinelCompletion({
+      sentinel, latestOutput: output, observation,
+      readChildSessionState, request,
+      agentIdentifier, backend, paneId, sessionId, launchId, log,
+    }),
+  };
+}
+
 export async function waitForLaunchCompletion({
+  launchId,
+  stateDir,
   backend,
   paneId,
   sessionId = null,
@@ -178,6 +366,9 @@ export async function waitForLaunchCompletion({
   maxAttempts = 25,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   sleep = async (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  sidecarServices,
+  sidecarGraceMs = 0,
+  log = () => {},
 } = {}) {
   if (typeof readPaneOutput !== "function") {
     throw new Error("Pane output monitoring is not configured.");
@@ -187,70 +378,23 @@ export async function waitForLaunchCompletion({
   let latestObservation = {};
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    latestObservation = (await readPaneOutput({
-      backend,
-      paneId,
-      sessionId,
-      agentIdentifier,
-      request,
-      attempt,
-    })) ?? {};
-    latestOutput = latestObservation.output ?? latestOutput;
-
-    const sentinel = detectExitSentinel(latestOutput);
-    if (sentinel) {
-      const persistedChildState = typeof readChildSessionState === "function"
-        ? await readChildSessionState({ backend, paneId, sessionId, agentIdentifier, request })
-        : null;
-      const status = mapExitState({
-        exitCode: sentinel.exitCode,
-        cancelled: Boolean(latestObservation.cancelled),
-        timedOut: Boolean(latestObservation.timedOut),
-      });
-      const summary = extractLaunchSummary({
-        persistedExplicitSummary:
-          latestObservation.persistedExplicitSummary ??
-          latestObservation.summary ??
-          persistedChildState?.summary,
-        paneOutput: latestOutput,
-        agentIdentifier,
-        backend,
-        paneId,
-        sessionId,
-        status,
-        exitCode: sentinel.exitCode,
-      });
-
-      return {
-        status,
-        exitCode: sentinel.exitCode,
-        summary: summary.summary,
-        summarySource: summary.source,
-        paneOutput: latestOutput,
-      };
-    }
+    const tick = await runMonitorTick({
+      attempt, launchId, stateDir, sidecarServices, sidecarGraceMs, sleep,
+      request, readPaneOutput, readChildSessionState,
+      agentIdentifier, backend, paneId, sessionId, log,
+      latestOutput, latestObservation,
+    });
+    if (tick.result) return tick.result;
+    latestObservation = tick.observation;
+    latestOutput = tick.output;
 
     if (attempt + 1 < maxAttempts && pollIntervalMs > 0) {
       await sleep(pollIntervalMs);
     }
   }
 
-  const summary = extractLaunchSummary({
-    persistedExplicitSummary: latestObservation.persistedExplicitSummary ?? latestObservation.summary,
-    paneOutput: latestOutput,
-    agentIdentifier,
-    backend,
-    paneId,
-    sessionId,
-    status: "timeout",
-    exitCode: null,
+  return buildTimeoutCompletion({
+    launchId, latestOutput, latestObservation,
+    agentIdentifier, backend, paneId, sessionId, log,
   });
-
-  return {
-    status: "timeout",
-    exitCode: null,
-    summary: summary.summary,
-    summarySource: summary.source,
-    paneOutput: latestOutput,
-  };
 }

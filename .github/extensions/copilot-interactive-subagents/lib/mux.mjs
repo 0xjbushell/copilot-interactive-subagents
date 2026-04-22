@@ -259,16 +259,67 @@ export async function resolveLaunchBackend({
   });
 }
 
+// A pane whose foreground command is a plain shell is treated as "dead" —
+// the copilot subprocess has exited and the user hasn't closed the zombie pane yet.
+// Resume is safe in that state: we open a fresh pane bound to the same sessionId.
+const DEAD_SHELLS = new Set(["bash", "zsh", "sh", "fish", "dash", "ksh"]);
+
+function paneCommandIndicatesDeadShell(command) {
+  const trimmed = String(command ?? "").trim();
+  if (!trimmed) return true;
+  // Strip leading "-" used by login shells (e.g. "-bash").
+  const normalized = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
+  const [firstToken] = normalized.split(" ");
+  return DEAD_SHELLS.has(firstToken);
+}
+
+function parseTmuxPaneLine(line) {
+  const parts = line.split(" ");
+  return {
+    id: parts[0] ?? "",
+    deadFlag: parts[1] ?? "",
+    currentCommand: parts.slice(2).join(" "),
+  };
+}
+
+function probeTmuxLiveness(paneId, spawnSync) {
+  const result = spawnSync(
+    "tmux",
+    ["list-panes", "-a", "-F", "#{pane_id} #{pane_dead} #{pane_current_command}"],
+    { stdio: "pipe" },
+  );
+  if (result.status !== 0) return false;
+  const lines = String(result.stdout ?? "").split(/\r?\n/);
+  for (const line of lines) {
+    if (!line) continue;
+    const { id, deadFlag, currentCommand } = parseTmuxPaneLine(line);
+    if (id !== paneId) continue;
+    if (deadFlag === "1") return false;
+    return !paneCommandIndicatesDeadShell(currentCommand);
+  }
+  return false;
+}
+
+function probeZellijLiveness(paneId, spawnSync) {
+  const numericId = Number.parseInt(stripPanePrefix(paneId), 10);
+  if (!Number.isFinite(numericId)) return false;
+  const result = spawnSync("zellij", ["action", "list-panes", "-j", "-c"], { stdio: "pipe" });
+  if (result.status !== 0) return false;
+  let panes;
+  try {
+    panes = JSON.parse(String(result.stdout ?? ""));
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(panes)) return false;
+  const match = panes.find((p) => p && p.is_plugin === false && Number(p.id) === numericId);
+  if (!match || match.exited === true) return false;
+  return !paneCommandIndicatesDeadShell(match.pane_command);
+}
+
 export function probeSessionLiveness({ backend, paneId, services = {} } = {}) {
   const spawnSync = services.spawnSync ?? defaultSpawnSync;
-  if (backend === "tmux") {
-    const result = spawnSync("tmux", ["has-session", "-t", paneId], { stdio: "pipe" });
-    return result.status === 0;
-  }
-  if (backend === "zellij") {
-    const numericId = stripPanePrefix(paneId);
-    const result = spawnSync("zellij", ["action", "dump-screen", "--pane-id", numericId], { stdio: "pipe" });
-    return result.status === 0;
-  }
+  if (backend === "tmux") return probeTmuxLiveness(paneId, spawnSync);
+  if (backend === "zellij") return probeZellijLiveness(paneId, spawnSync);
   return false;
 }

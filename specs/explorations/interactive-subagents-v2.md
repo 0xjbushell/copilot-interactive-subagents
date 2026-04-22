@@ -92,15 +92,27 @@ This means:
 
 **Important:** `caller_ping` is only registered in child agents (gated by `COPILOT_SUBAGENT_SESSION` env var, same pattern pi uses with `PI_SUBAGENT_SESSION`).
 
-### 3. Tool access control — YES, direct port
+### 3. Tool access control — YES, scope narrowed to recursion block
+
+**Scope:** Prevent child subagents from spawning further subagents. Only the top-level/parent session may call the extension's public subagent tools (`copilot_subagent_launch`, `copilot_subagent_parallel`, `copilot_subagent_resume`, `copilot_subagent_set_title`, `copilot_subagent_list_agents`). Children retain `subagent_done` (and the forthcoming `caller_ping`) — those are child-only lifecycle tools.
 
 **Copilot CLI adaptation:**
-- `denyTools` parameter on `copilot_subagent_launch`
-- Stored in launch manifest
-- Propagated as `COPILOT_SUBAGENT_DENY_TOOLS` env var to child process
-- Extension reads env var in `registerExtensionSession()`, filters tools before SDK registration
+- The extension already detects child sessions via `process.env.COPILOT_SUBAGENT_SESSION_ID`, set by the parent's launch command builder (`backend-ops.mjs:242`) for every spawned pane.
+- When that env var is set, filter the public subagent tool names out of the array returned by `buildSdkTools(handlers)` before SDK registration.
+- Symmetric to how `subagent_done` is conditionally registered today (`extension.mjs:496-510`), only inverted — set = child, so omit the spawning tools.
 
-**Scope (v2):** Prevent recursive spawning only (deny `copilot_subagent_launch`, `copilot_subagent_parallel`). True read-only sandboxing of built-in Copilot CLI tools is not feasible without CLI-level support.
+**What is NOT in scope for v2:**
+- No per-launch `denyTools` parameter, no manifest field, no config UI.
+- No filtering of built-in CLI tools (`bash`, `view`, `edit`, `create`, `ask_user`, etc.). The Copilot SDK does expose `availableTools`/`excludedTools` via `JoinSessionConfig` (see `copilot-sdk/types.d.ts:905-912`) for broader sandboxing, but that is deferred. The current goal is recursion prevention only.
+- No denying spawn tools in the parent session — parent keeps full access.
+
+**Why it fits:**
+- Zero new state — the env var is already set authoritatively by the parent.
+- Zero new protocol — tools simply aren't registered, so the child model has no knowledge they exist.
+- No runtime error paths — registration-time filtering means calls never reach a handler.
+- Matches the existing gated-registration pattern used for `subagent_done`.
+
+**Security model:** A child cannot clear or override `COPILOT_SUBAGENT_SESSION_ID` against itself — the parent owns the child's command line and environment. If the env var is present at registration, the extension treats the session as a child and strips the spawning tools.
 
 ### 4. Artifact system — NO, not needed
 
@@ -138,7 +150,7 @@ Three features, implemented sequentially:
 
 1. **Structured exit sidecar** — upgrade signal file to JSON with type/exitCode/summary
 2. **caller_ping** — exit-with-status tool for child agents (depends on sidecar)
-3. **Tool access control** — env var deny list for recursion prevention
+3. **Tool access control** — gate public subagent tools behind `COPILOT_SUBAGENT_SESSION_ID` absence (children cannot spawn further children)
 
 ### Implementation Order
 
@@ -153,10 +165,10 @@ Three features, implemented sequentially:
    - Add ping detection to parent poll
    - Return ping details in tool result
 
-3. Tool access control (independent)
-   - Add denyTools param to launch schema
-   - Store in manifest, propagate via env var
-   - Filter tools at extension registration
+3. Tool access control (independent — trivial, can ship first or alongside 1–2)
+   - Define SPAWNING_TOOL_NAMES constant in extension.mjs
+   - In registerExtensionSession, filter the tools array when COPILOT_SUBAGENT_SESSION_ID is set
+   - Add symmetric unit test next to the existing subagent_done gating tests
 ```
 
 ### Backward Compatibility
@@ -175,10 +187,41 @@ Ship as **v2.0.0** — new IPC mechanism warrants major version bump, even with 
 |---------|-----------|----------------|
 | Exit sidecar | — | `backend-ops.mjs`, `lib/launch.mjs`, `lib/summary.mjs`, `lib/resume.mjs`, `lib/state.mjs` |
 | caller_ping | — | `backend-ops.mjs` (tool registration), `extension.mjs` (schema), `lib/launch.mjs` (detection) |
-| Tool access control | — | `extension.mjs` (filter), `lib/launch.mjs` (manifest), `backend-ops.mjs` (env propagation) |
+| Tool access control | — | `extension.mjs` (registration-time filter only) |
+
+## SDK Learning-Test Findings (2026-04-17)
+
+Captured via `specs/learning-tests/v2-sdk-probe.mjs` (throwaway probe). Raw log: `specs/learning-tests/v2-sdk-probe.log`.
+
+### Confirmed
+
+- **Per-session extension forks.** Each Copilot session forks its own extension process. `joinSession()` resolves a `sessionId` before the session actually "starts". First-prompt hook ordering: `extension.load` → `joinSession.resolved` → `probe.ready` → `hook.onUserPromptSubmitted` → `hook.onSessionStart` (with `source:"new"`, `initialPrompt`). `onUserPromptSubmitted` firing **before** `onSessionStart` for the first prompt is counter-intuitive; do per-session init at module top level, not in `onSessionStart`.
+- **`user.message` event schema.** `data` keys: `content`, `source?`, `interactionId`. Skills inject with `source="skill-<name>"` and content prefixed with `<skill-context name="…">…`. `MessageOptions` has no `source` field, so extension-injected `session.send` turns cannot be distinguished from real user typing via source alone.
+- **`assistant.turn_start/turn_end/message` events fire**, carrying `turnId`, `interactionId`, `messageId`, `content`, `toolRequests`, `reasoningOpaque`/`reasoningText`, `outputTokens`, `requestId`.
+- **`extensions_reload` disposes all active extension connections.** Existing sessions lose their tools until they fork new extension processes. Newly-installed extensions only attach to sessions that start or reload **after** install.
+
+### Implications for v2 design
+
+None of these findings change the pi-aligned scope above. Concretely:
+
+1. **The single `.exit.json` file is correct for our use case**, precisely because it is *not* a mailbox. `subagent_done` and `caller_ping` both write once and then shut the child down (`ctx.shutdown()` in pi, pane-close + sentinel in ours). There is exactly one write per child-session lifetime, so the overwrite/queue/ack hazards a mailbox would have simply do not apply:
+
+   | Mailbox hazard | Exit-with-status (our design) |
+   |---|---|
+   | Writer overwrites its own earlier events | Cannot happen — child terminates after the one write |
+   | Parent crashes after read before processing | Poll is synchronous inside the launch tool call; if the tool call itself crashes, the launch has already failed and the user sees it |
+   | Multiple writers racing | One child, one sidecar path per launchId |
+   | Child emits progress/ping *while still running* | Out of scope — would require async injection (deferred indefinitely, see below) |
+
+2. **Async parent-ping / bidirectional channel is deferred indefinitely.** It would require either `session.send({mode:"enqueue"})` injection into the parent (which pollutes conversation history as a synthetic user turn and cannot be tagged via `source`) or a separate in-session watcher extension (reload-hostile — `/clear` kills its `setInterval`). Neither is justified by the current use cases. `caller_ping` as exit-with-status + existing `subagent_resume` already covers the "child needs help" flow.
+
+3. **User-takeover detection is deferred indefinitely.** Depends on reliably distinguishing injected prompts from real user input via `user.message.source`, which is not possible for extensions today. Moot anyway without Feature #0.
+
+4. **Tool access control (Feature #3) is unaffected by these findings.** Registration-time filter on `COPILOT_SUBAGENT_SESSION_ID` runs at module top level — before any hook ordering or reload concerns apply.
 
 ## References
 
 - pi-interactive-subagents v2.2.0: `~/.projects/oss/pi-interactive-subagents/`
 - v1 spec: `specs/subagents/interactive-subagents-v1.md`
+- Learning-test probe: `~/.copilot/extensions/v2-sdk-probe/extension.mjs` (throwaway)
 - v1 exploration: `specs/explorations/interactive-subagents-v1.md`

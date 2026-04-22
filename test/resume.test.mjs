@@ -62,7 +62,7 @@ describe("resume pane-backed launches from stored metadata", () => {
       sessionId: "session-from-index",
       requestedAt: "2026-03-19T00:00:00.000Z",
       status: "running",
-      metadataVersion: 2,
+      metadataVersion: 3,
       manifestPath: "/tmp/elsewhere/launch-workspace-first.json",
     });
 
@@ -107,7 +107,7 @@ describe("resume pane-backed launches from stored metadata", () => {
       sessionId: "session-index-only",
       requestedAt: "2026-03-19T00:00:00.000Z",
       status: "running",
-      metadataVersion: 2,
+      metadataVersion: 3,
       manifestPath: path.join(workspacePath, "missing.json"),
     });
 
@@ -128,7 +128,7 @@ describe("resume pane-backed launches from stored metadata", () => {
     assert.equal(plan.manifest.sessionId, "session-index-only");
   });
 
-  it("returns RESUME_UNSUPPORTED when stored metadata uses an unsupported version", async (t) => {
+  it("throws MANIFEST_VERSION_UNSUPPORTED when stored metadata uses an unsupported version", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-unsupported-");
     const { planResumeSession } = await importProjectModule(
       ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
@@ -150,26 +150,51 @@ describe("resume pane-backed launches from stored metadata", () => {
       },
     });
 
-    const plan = await planResumeSession({
-      request: {
-        launchId: "launch-unsupported",
-        workspacePath,
+    await assert.rejects(
+      () => planResumeSession({ request: { launchId: "launch-unsupported", workspacePath } }),
+      (err) => err?.code === "MANIFEST_VERSION_UNSUPPORTED" && err.observedVersion === 99,
+    );
+  });
+
+  it("GIVEN manifest.status === \"failure\" WHEN resume runs THEN probeSessionLiveness is NOT called (terminal-status fix)", async (t) => {
+    const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-failure-status-");
+    const { resumeSubagent } = await importProjectModule(
+      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      ["resumeSubagent"],
+    );
+
+    const stateStore = await writeLaunchRecord({
+      workspacePath,
+      record: {
+        launchId: "launch-failure",
+        agentIdentifier: "reviewer",
+        agentKind: "custom",
+        backend: "tmux",
+        paneId: "%11",
+        sessionId: "session-failed",
+        copilotSessionId: "csid-failure",
+        requestedAt: "2026-03-19T00:00:00.000Z",
+        status: "failure",
       },
     });
 
-    assert.deepEqual(
-      {
-        ok: plan.ok,
-        code: plan.code,
-        launchId: plan.launchId,
+    let probeCalled = false;
+    const result = await resumeSubagent({
+      request: { launchId: "launch-failure", workspacePath },
+      services: {
+        stateStore,
+        acquireLock: () => ({ release: () => {} }),
+        // If the typo regresses ("failed" instead of "failure"), this would be
+        // invoked and (returning true) would short-circuit to SESSION_ACTIVE.
+        probeSessionLiveness: () => { probeCalled = true; return true; },
+        openPaneAndSendCommand: async () => ({ paneId: "%21" }),
+        readFileSync: () => { throw new Error("ENOENT"); },
       },
-      {
-        ok: false,
-        code: "RESUME_UNSUPPORTED",
-        launchId: "launch-unsupported",
-      },
-    );
-    assert.match(plan.message, /metadata/i);
+    });
+
+    assert.equal(probeCalled, false, "probeSessionLiveness must not be invoked for status=failure");
+    assert.notEqual(result.code, "SESSION_ACTIVE");
+    assert.equal(result.status, "interactive");
   });
 
   it("GIVEN prior stored metadata with copilotSessionId WHEN resume runs THEN it creates new pane and returns interactive status", async (t) => {

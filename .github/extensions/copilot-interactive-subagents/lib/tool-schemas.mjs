@@ -43,9 +43,10 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       backend: "string",
       paneId: "string|null",
       sessionId: "string|null",
-      status: "running|success|failure|cancelled|timeout",
-      summary: "string",
-      exitCode: "number|null",
+      status: "running|success|failure|cancelled|timeout|ping (TERMINAL: success|failure|timeout|cancelled|ping; IN_FLIGHT: pending|running|interactive)",
+      summary: "string|null (null when status=ping)",
+      exitCode: "number|null (always 0 when status=ping)",
+      ping: "{ message: string } (present only when status=ping)",
       resumePointer: "object|null",
     },
   },
@@ -61,7 +62,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     resultShape: {
       aggregateStatus: "running|success|partial-success|failure|timeout",
       results:
-        "Array<{ launchId, backend, paneId, sessionId, status, summary, exitCode, resumePointer }>",
+        "Array<{ launchId, backend, paneId, sessionId, status, summary, exitCode, ping?, resumePointer }>",
       progressByLaunchId: "Record<string, result>",
     },
   },
@@ -71,15 +72,17 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     requestShape: {
       launchId: "string (or resumeReference/resumePointer)",
       awaitCompletion: "boolean (optional, default true)",
+      task: "string (optional follow-up instruction; empty string === omitted, no extra prompt delivered)",
     },
     resultShape: {
       launchId: "string",
       backend: "string|null",
       paneId: "string|null",
       sessionId: "string|null",
-      status: "running|success|failure|cancelled|timeout",
-      summary: "string",
+      status: "running|success|failure|cancelled|timeout|ping",
+      summary: "string|null",
       exitCode: "number|null",
+      ping: "{ message: string } (present only when status=ping)",
       resumePointer: "object|null",
     },
   },
@@ -193,6 +196,10 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
         },
       },
       awaitCompletion: { type: "boolean" },
+      task: {
+        type: "string",
+        description: "Optional follow-up instruction delivered to the resumed child as a new launch prompt. Use this to respond to a caller_ping or to extend the child's work. Extension does NOT auto-prepend prior ping context — caller crafts the full task string.",
+      },
     },
   },
   copilot_subagent_set_title: {
@@ -222,3 +229,23 @@ export const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_resume: "copilotSubagentResume",
   copilot_subagent_set_title: "copilotSubagentSetTitle",
 };
+
+// D4.1: explicit allow-list of tool names that MUST be stripped from a child's
+// tools[] before joinSession (parent-only tools). Filtering happens AFTER alias
+// expansion in registerExtensionSession.
+export const PUBLIC_SPAWNING_TOOL_NAMES = new Set([
+  "copilot_subagent_launch",
+  "copilot_subagent_parallel",
+  "copilot_subagent_resume",
+  "copilot_subagent_set_title",
+  "copilot_subagent_list_agents",
+  "copilotSubagentLaunch",
+  "copilotSubagentParallel",
+  "copilotSubagentResume",
+  "copilotSubagentSetTitle",
+  "copilotSubagentListAgents",
+]);
+
+// D2.1: name constant only (runtime tool def lives inline in extension.mjs).
+// Used by D4.1's child-only filter set.
+export const CALLER_PING_TOOL_NAME = "caller_ping";

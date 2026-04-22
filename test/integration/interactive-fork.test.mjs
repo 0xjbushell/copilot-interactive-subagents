@@ -90,30 +90,4 @@ describe("interactive launch, fork, and subagent_done lifecycle", () => {
     assert.equal(planned[1].plan.closePaneOnCompletion, false);
     assert.notEqual(planned[0].plan.copilotSessionId, planned[1].plan.copilotSessionId);
   });
-
-  it("GIVEN subagent_done signal WHEN writeSignalFile called THEN signal file is created", async (t) => {
-    const { writeSignalFile } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
-      ["writeSignalFile"],
-    );
-
-    const workspace = await createWorkspace(t);
-    const doneDir = path.join(workspace, "done");
-    await mkdir(doneDir, { recursive: true });
-
-    writeSignalFile({
-      copilotSessionId: "signal-session-id",
-      launchId: "signal-launch-id",
-      stateDir: workspace,
-    });
-
-    // Give async write time
-    await new Promise((r) => setTimeout(r, 100));
-
-    const files = await readdir(doneDir);
-    assert.ok(files.includes("signal-session-id"), "Signal file should exist, found: " + files);
-
-    const content = await readFile(path.join(doneDir, "signal-session-id"), "utf8");
-    assert.ok(content.includes("signal-launch-id"), "Signal should contain launchId");
-  });
 });

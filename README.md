@@ -407,6 +407,21 @@ Example result:
 }
 ```
 
+When the child writes a `caller_ping` exit sidecar instead of completing, the result carries `status: "ping"` and a `ping` payload:
+
+```json
+{
+  "ok": true,
+  "launchId": "launch-001",
+  "status": "ping",
+  "summary": null,
+  "exitCode": 0,
+  "ping": { "message": "I need your input on X" }
+}
+```
+
+`ok` stays `true` because ping is a non-failure terminal state. To respond, call `copilot_subagent_resume` with a `task` describing how to proceed.
+
 ### `copilot_subagent_parallel`
 
 Launches multiple agents against one shared backend.
@@ -482,14 +497,15 @@ Important constraint:
 
 ### `copilot_subagent_resume`
 
-Resumes a previously launched pane-backed session using `launchId` or `resumePointer`.
+Resumes a previously launched pane-backed session using `launchId` or `resumePointer`. Optional `task` field delivers a follow-up instruction to the resumed child as a launch prompt — useful for responding to a `caller_ping`. Empty string and omission are treated identically (no extra prompt delivered).
 
 Request:
 
 ```json
 {
   "launchId": "launch-001",
-  "awaitCompletion": false
+  "awaitCompletion": false,
+  "task": "please continue with the next step"
 }
 ```
 

@@ -101,7 +101,7 @@ function defineBackendSuite(backend) {
       assert.equal(manifest.status, "success");
       assert.equal(manifest.exitCode, 0);
       assert.equal(manifest.backend, backend);
-      assert.equal(manifest.metadataVersion, 2);
+      assert.equal(manifest.metadataVersion, 3);
       assert.ok(manifest.copilotSessionId, "Manifest should have copilotSessionId");
     });
 

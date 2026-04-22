@@ -20,7 +20,6 @@ import { uniqueStable } from "./lib/utils.mjs";
 import {
   resolveCommandPath,
   createDefaultAgentLaunchCommand,
-  writeSignalFile,
   defaultOpenPane,
   defaultLaunchAgentInPane,
   defaultReadPaneOutput,
@@ -28,11 +27,13 @@ import {
   defaultAttachBackendForRuntime,
   defaultStartBackendForRuntime,
 } from "./lib/backend-ops.mjs";
+import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
 import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_TOOL_DEFINITIONS,
   PUBLIC_TOOL_PARAMETER_SCHEMAS,
   CAMELCASE_HANDLER_NAMES,
+  PUBLIC_SPAWNING_TOOL_NAMES,
 } from "./lib/tool-schemas.mjs";
 import {
   normalizeLaunchRequest,
@@ -46,7 +47,7 @@ import {
 } from "./lib/validation.mjs";
 
 // Re-export for backward compatibility (tests import these from extension.mjs)
-export { createDefaultAgentLaunchCommand, writeSignalFile };
+export { createDefaultAgentLaunchCommand };
 export { PUBLIC_TOOL_NAMES, PUBLIC_TOOL_DEFINITIONS, PUBLIC_TOOL_PARAMETER_SCHEMAS };
 
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];
@@ -358,20 +359,29 @@ function toToolResult(result) {
 
 const DEFAULT_TOOL_TIMEOUT_MS = 90_000;
 
-async function withToolTimeout(toolName, handler, args) {
+export async function withToolTimeout(toolName, handler, args) {
   let timer;
+  let timedOut = false;
   try {
     return await Promise.race([
       handler(args),
       new Promise((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`Tool ${toolName} timed out after ${DEFAULT_TOOL_TIMEOUT_MS}ms`)),
+          () => {
+            timedOut = true;
+            reject(new Error(`Tool ${toolName} timed out after ${DEFAULT_TOOL_TIMEOUT_MS}ms`));
+          },
           DEFAULT_TOOL_TIMEOUT_MS,
         );
         if (timer.unref) timer.unref();
       }),
     ]);
   } catch (error) {
+    if (!timedOut) {
+      // Non-timeout error: propagate with original code intact so SDK and
+      // tests see typed errors (e.g. MANIFEST_VERSION_UNSUPPORTED).
+      throw error;
+    }
     return toToolResult({
       ok: false,
       code: "TOOL_TIMEOUT",
@@ -467,6 +477,23 @@ export async function createExtensionHandlers(overrides = {}) {
   };
 }
 
+function resolveChildStateDir() {
+  // D1.1's contract: parent ALWAYS exports COPILOT_SUBAGENT_STATE_DIR alongside
+  // COPILOT_SUBAGENT_LAUNCH_ID. Fail loud on the fallback path so a silently
+  // misrouted sidecar doesn't drop on the floor.
+  const fromEnv = process.env.COPILOT_SUBAGENT_STATE_DIR;
+  if (fromEnv) return fromEnv;
+  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    const error = new Error(
+      "COPILOT_SUBAGENT_LAUNCH_ID is set but COPILOT_SUBAGENT_STATE_DIR is not. " +
+        "Parent must export both (D1.1 contract). Aborting child tool to prevent silent IPC loss.",
+    );
+    error.code = "STATE_DIR_MISSING";
+    throw error;
+  }
+  return resolveStateDir({ projectRoot: process.cwd() });
+}
+
 export async function registerExtensionSession(options = {}) {
   const joinSession =
     options.joinSession ?? (await import("@github/copilot-sdk/extension")).joinSession;
@@ -491,20 +518,82 @@ export async function registerExtensionSession(options = {}) {
     },
   });
 
-  const tools = buildSdkTools(handlers);
+  let tools = buildSdkTools(handlers);
 
-  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {
+  // D4.1 + caller_ping + subagent_done: all child-only behavior gates on
+  // COPILOT_SUBAGENT_LAUNCH_ID. Single block so the contract is obvious.
+  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    // The childToolServices seam is fs-shaped (writeFileSync/mkdirSync/
+    // renameSync/now) for exit-sidecar IO. Tests inject overrides; production
+    // falls through to module defaults inside writeExitSidecar.
+    const childToolServices = options.childToolServices ?? {};
+
+    // Strip parent-only spawning tools. Filter happens AFTER alias expansion
+    // so camelCase aliases are also caught.
+    tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));
+
+    tools.push({
+      name: "caller_ping",
+      description:
+        "Pause your work and notify the parent caller that you need input. After calling this, end your turn — your session will terminate and the parent will resume you with a follow-up task.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "What you need from the parent (a question, a blocker, or a status update).",
+          },
+        },
+        required: ["message"],
+      },
+      handler: ({ message } = {}) => {
+        const launchId = process.env.COPILOT_SUBAGENT_LAUNCH_ID;
+        try {
+          writeExitSidecar({
+            launchId,
+            type: "ping",
+            message,
+            stateDir: resolveChildStateDir(),
+            services: childToolServices,
+          });
+        } catch (err) {
+          // Best-effort shutdown contract (spec line 163): the model relies on
+          // the verbatim return string to end its turn. On IO failure surface
+          // the error in stderr but DO NOT fail the tool — otherwise the model
+          // keeps calling tools instead of yielding.
+          process.stderr.write(`caller_ping: sidecar write failed: ${err?.message ?? err}\n`);
+        }
+        return {
+          ok: true,
+          message: "Ping sent. Session is terminating. Do not call further tools. End your turn.",
+        };
+      },
+    });
+
     tools.push({
       name: "subagent_done",
       description:
-        "Call when you have completed your task. Put your final summary in your last message BEFORE calling this tool. Your session will end after this call.",
-      parameters: {},
-      handler: () => {
-        writeSignalFile({
-          copilotSessionId: process.env.COPILOT_SUBAGENT_SESSION_ID,
+        "Call when you have completed your task. Optionally pass a summary; otherwise put your final summary in your last message before calling. Session ends after this call.",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "Optional final summary text." },
+        },
+      },
+      handler: ({ summary } = {}) => {
+        const trimmed = (typeof summary === "string" && summary.trim().length > 0) ? summary : null;
+        writeExitSidecar({
           launchId: process.env.COPILOT_SUBAGENT_LAUNCH_ID,
+          type: "done",
+          summary: trimmed,
+          exitCode: 0,
+          stateDir: resolveChildStateDir(),
+          services: childToolServices,
         });
-        return { ok: true, message: "Task marked complete. Session ending." };
+        return {
+          ok: true,
+          message: "Session is terminating. Do not call further tools. End your turn.",
+        };
       },
     });
   }

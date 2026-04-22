@@ -33,7 +33,7 @@ export function uniqueSorted(values = []) {
 
 /** Returns true for launch/resume statuses that indicate a non-failed outcome. */
 export function isActiveOrSuccessful(status) {
-  return status === "success" || status === "running" || status === "interactive";
+  return status === "success" || status === "running" || status === "interactive" || status === "ping";
 }
 
 /** Strips the "pane:" prefix from a zellij pane identifier (e.g. "pane:5" → "5"). */

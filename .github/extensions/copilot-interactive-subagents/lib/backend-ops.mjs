@@ -208,6 +208,23 @@ export function extractPaneId(stdout = "") {
   return paneId;
 }
 
+function buildLaunchEnvParts(request, { agentIdentifierB64, taskB64, copilotSessionId }) {
+  const parts = [
+    `COPILOT_SUBAGENT_AGENT_B64=${shellEscape(agentIdentifierB64)}`,
+    `COPILOT_SUBAGENT_TASK_B64=${shellEscape(taskB64)}`,
+  ];
+  if (copilotSessionId) {
+    parts.push(`COPILOT_SUBAGENT_SESSION_ID=${shellEscape(copilotSessionId)}`);
+  }
+  if (request.launchId) {
+    parts.push(`COPILOT_SUBAGENT_LAUNCH_ID=${shellEscape(request.launchId)}`);
+  }
+  if (request.stateDir) {
+    parts.push(`COPILOT_SUBAGENT_STATE_DIR=${shellEscape(request.stateDir)}`);
+  }
+  return parts;
+}
+
 export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = {}, { agentIdentifier, task, copilotSessionId, interactive, backend }) {
   const createAgentLaunchCommand =
     request.createAgentLaunchCommand ?? runtimeServices.createAgentLaunchCommand;
@@ -234,27 +251,8 @@ export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = 
     'process.exit(code);',
   ].join("");
 
-  const envParts = [
-    `COPILOT_SUBAGENT_AGENT_B64=${shellEscape(agentIdentifierB64)}`,
-    `COPILOT_SUBAGENT_TASK_B64=${shellEscape(taskB64)}`,
-  ];
-  if (copilotSessionId) {
-    envParts.push(`COPILOT_SUBAGENT_SESSION_ID=${shellEscape(copilotSessionId)}`);
-  }
-  if (request.launchId) {
-    envParts.push(`COPILOT_SUBAGENT_LAUNCH_ID=${shellEscape(request.launchId)}`);
-  }
+  const envParts = buildLaunchEnvParts(request, { agentIdentifierB64, taskB64, copilotSessionId });
   return [...envParts, `node -e ${shellEscape(runnerScript)}`].join(" ");
-}
-
-export function writeSignalFile({ copilotSessionId, launchId, stateDir, services = {} } = {}) {
-  const mkdirSync = services.mkdirSync ?? defaultMkdirSync;
-  const writeFileSync = services.writeFileSync ?? defaultWriteFileSync;
-  const now = services.now ?? Date.now;
-  const baseDir = stateDir ?? ".copilot-interactive-subagents";
-  const signalDir = path.join(baseDir, "done");
-  mkdirSync(signalDir, { recursive: true });
-  writeFileSync(path.join(signalDir, copilotSessionId), `${now()}|${launchId ?? "unknown"}`);
 }
 
 export async function defaultOpenPane({ backend, request, runtimeServices = {}, ...context }) {

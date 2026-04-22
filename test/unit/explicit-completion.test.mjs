@@ -5,61 +5,14 @@ import { importProjectModule } from "../helpers/red-harness.mjs";
 const EXT_PATH = ".github/extensions/copilot-interactive-subagents/extension.mjs";
 
 describe("Explicit completion (subagent_done)", () => {
-  describe("writeSignalFile", () => {
-    it("GIVEN copilotSessionId and launchId WHEN called THEN writes signal file with timestamp|launchId", async () => {
-      const { writeSignalFile } = await importProjectModule(EXT_PATH, ["writeSignalFile"]);
-      const written = {};
-      const services = {
-        mkdirSync: (dir, opts) => { written.dir = dir; written.opts = opts; },
-        writeFileSync: (filePath, content) => { written.path = filePath; written.content = content; },
-        now: () => 1700000000000,
-      };
-      writeSignalFile({
-        copilotSessionId: "session-abc",
-        launchId: "launch-xyz",
-        stateDir: "/tmp/test-state",
-        services,
-      });
-      assert.ok(written.dir.includes("done"));
-      assert.ok(written.opts.recursive);
-      assert.ok(written.path.endsWith("session-abc"));
-      assert.equal(written.content, "1700000000000|launch-xyz");
-    });
-
-    it("GIVEN no launchId WHEN called THEN uses 'unknown' in content", async () => {
-      const { writeSignalFile } = await importProjectModule(EXT_PATH, ["writeSignalFile"]);
-      let content;
-      const services = {
-        mkdirSync: () => {},
-        writeFileSync: (_, c) => { content = c; },
-        now: () => 42,
-      };
-      writeSignalFile({ copilotSessionId: "s1", services });
-      assert.equal(content, "42|unknown");
-    });
-
-    it("GIVEN default stateDir WHEN called THEN uses .copilot-interactive-subagents", async () => {
-      const { writeSignalFile } = await importProjectModule(EXT_PATH, ["writeSignalFile"]);
-      let dir;
-      const services = {
-        mkdirSync: (d) => { dir = d; },
-        writeFileSync: () => {},
-        now: () => 0,
-      };
-      writeSignalFile({ copilotSessionId: "s1", services });
-      assert.ok(dir.includes(".copilot-interactive-subagents"));
-      assert.ok(dir.includes("done"));
-    });
-  });
-
   describe("subagent_done tool registration", () => {
-    it("GIVEN COPILOT_SUBAGENT_SESSION_ID set WHEN session registers THEN subagent_done tool is included", async () => {
+    it("GIVEN COPILOT_SUBAGENT_LAUNCH_ID set WHEN session registers THEN subagent_done tool is included with optional summary parameter", async () => {
       const { registerExtensionSession } = await importProjectModule(EXT_PATH, ["registerExtensionSession"]);
-      const originalEnv = process.env.COPILOT_SUBAGENT_SESSION_ID;
       const originalLaunchEnv = process.env.COPILOT_SUBAGENT_LAUNCH_ID;
+      const originalSessionEnv = process.env.COPILOT_SUBAGENT_SESSION_ID;
       try {
-        process.env.COPILOT_SUBAGENT_SESSION_ID = "test-session-id";
         process.env.COPILOT_SUBAGENT_LAUNCH_ID = "test-launch-id";
+        delete process.env.COPILOT_SUBAGENT_SESSION_ID;
 
         let registeredTools;
         const mockJoinSession = async ({ tools }) => {
@@ -71,21 +24,23 @@ describe("Explicit completion (subagent_done)", () => {
 
         const doneTool = registeredTools.find((t) => t.name === "subagent_done");
         assert.ok(doneTool, "subagent_done tool should be registered");
-        assert.deepEqual(doneTool.parameters, {});
-        assert.ok(doneTool.description.includes("completed your task"));
+        assert.equal(doneTool.parameters.type, "object");
+        assert.ok(doneTool.parameters.properties.summary, "summary param should be defined");
+        assert.equal(doneTool.parameters.properties.summary.type, "string");
+        assert.ok(!Array.isArray(doneTool.parameters.required) || doneTool.parameters.required.length === 0, "summary must NOT be required");
       } finally {
-        if (originalEnv === undefined) delete process.env.COPILOT_SUBAGENT_SESSION_ID;
-        else process.env.COPILOT_SUBAGENT_SESSION_ID = originalEnv;
         if (originalLaunchEnv === undefined) delete process.env.COPILOT_SUBAGENT_LAUNCH_ID;
         else process.env.COPILOT_SUBAGENT_LAUNCH_ID = originalLaunchEnv;
+        if (originalSessionEnv === undefined) delete process.env.COPILOT_SUBAGENT_SESSION_ID;
+        else process.env.COPILOT_SUBAGENT_SESSION_ID = originalSessionEnv;
       }
     });
 
-    it("GIVEN COPILOT_SUBAGENT_SESSION_ID not set WHEN session registers THEN subagent_done not included", async () => {
+    it("GIVEN COPILOT_SUBAGENT_LAUNCH_ID not set WHEN session registers THEN subagent_done not included", async () => {
       const { registerExtensionSession } = await importProjectModule(EXT_PATH, ["registerExtensionSession"]);
-      const originalEnv = process.env.COPILOT_SUBAGENT_SESSION_ID;
+      const originalLaunchEnv = process.env.COPILOT_SUBAGENT_LAUNCH_ID;
       try {
-        delete process.env.COPILOT_SUBAGENT_SESSION_ID;
+        delete process.env.COPILOT_SUBAGENT_LAUNCH_ID;
 
         let registeredTools;
         const mockJoinSession = async ({ tools }) => {
@@ -98,8 +53,8 @@ describe("Explicit completion (subagent_done)", () => {
         const doneTool = registeredTools.find((t) => t.name === "subagent_done");
         assert.equal(doneTool, undefined, "subagent_done should NOT be registered without env var");
       } finally {
-        if (originalEnv === undefined) delete process.env.COPILOT_SUBAGENT_SESSION_ID;
-        else process.env.COPILOT_SUBAGENT_SESSION_ID = originalEnv;
+        if (originalLaunchEnv === undefined) delete process.env.COPILOT_SUBAGENT_LAUNCH_ID;
+        else process.env.COPILOT_SUBAGENT_LAUNCH_ID = originalLaunchEnv;
       }
     });
   });

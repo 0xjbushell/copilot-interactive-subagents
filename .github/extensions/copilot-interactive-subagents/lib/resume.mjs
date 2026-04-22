@@ -1,18 +1,21 @@
 import {
   METADATA_VERSION,
+  assertSupportedMetadataVersion,
   buildResumePointer,
   isValidLaunchId,
   isSupportedBackend,
 } from "./state.mjs";
-import { extractLaunchSummary, extractSessionSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { extractLaunchSummary, waitForLaunchCompletion } from "./summary.mjs";
+import { enrichCompletionSummary, buildManifestUpdates, shapePingResult } from "./launch.mjs";
 import { acquireLock as defaultAcquireLock } from "./session-lock.mjs";
 import { probeSessionLiveness as defaultProbeSessionLiveness } from "./mux.mjs";
 import { closePane as defaultClosePane } from "./close-pane.mjs";
-import { unlinkSync as defaultUnlinkSync, readFileSync as defaultReadFileSync } from "node:fs";
+import { readFileSync as defaultReadFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir as defaultHomedir } from "node:os";
 import { resolveOperation, resolveStateStore, resolveStateIndex } from "./resolve.mjs";
 import { isActiveOrSuccessful, normalizeNonEmptyString, countNonEmptyLines } from "./utils.mjs";
+import { resolveStateDir, deleteExitSidecar as defaultDeleteExitSidecar } from "./exit-sidecar.mjs";
 
 function resolveLaunchId(request = {}) {
   return normalizeNonEmptyString(request.launchId)
@@ -64,14 +67,9 @@ function validateManifest({ manifest, request }) {
     });
   }
 
-  if (manifest.metadataVersion !== METADATA_VERSION) {
-    return shapeResumeFailure({
-      code: "RESUME_UNSUPPORTED",
-      message: `Stored launch metadata version ${manifest.metadataVersion} is not supported by this resume implementation.`,
-      manifest,
-      request,
-    });
-  }
+  // Hard cutover (D1.2): throws MANIFEST_VERSION_UNSUPPORTED when version
+  // mismatches; SDK callers and withToolTimeout see the typed code.
+  assertSupportedMetadataVersion(manifest, { source: "manifest" });
 
   if (!manifest.backend || !manifest.agentIdentifier || !manifest.paneId) {
     return shapeResumeFailure({
@@ -143,12 +141,6 @@ function shapeResumeResult({ manifest, request, paneVisible, summarySource }) {
   };
 }
 
-function cleanupStaleSignalFile({ copilotSessionId, stateDir, services = {} }) {
-  const unlinkSync = services.unlinkSync ?? defaultUnlinkSync;
-  const baseDir = stateDir ?? ".copilot-interactive-subagents";
-  try { unlinkSync(join(baseDir, "done", copilotSessionId)); } catch { /* not present */ }
-}
-
 function countSessionEvents({ copilotSessionId, copilotHome, services = {} }) {
   const readFile = services.readFileSync ?? defaultReadFileSync;
   const homedir = services.homedir ?? defaultHomedir;
@@ -164,6 +156,8 @@ async function awaitResumeCompletion({
   const readChildSessionState = resolveOperation({ request, services, name: "readChildSessionState" });
 
   const completion = await waitForLaunchCompletion({
+    launchId: manifest.launchId,
+    stateDir: request.stateDir,
     backend: manifest.backend,
     paneId: newPaneId,
     sessionId: manifest.sessionId,
@@ -174,45 +168,51 @@ async function awaitResumeCompletion({
     maxAttempts: request.maxMonitorAttempts ?? 25,
     pollIntervalMs: request.pollIntervalMs ?? 500,
     sleep: request.sleep,
+    sidecarGraceMs: request.sidecarGraceMs ?? 500,
   });
 
-  let completionSummary = completion.summary;
-  let completionSummarySource = completion.summarySource;
-  const sessionSummary = extractSessionSummary({
+  // Precedence (D2.3 inversion): sidecar > pane scrape > session-events fallback.
+  // Shared with initial-launch path via launch.mjs#enrichCompletionSummary.
+  const enriched = enrichCompletionSummary(completion, {
     copilotSessionId: manifest.copilotSessionId,
-    sinceEventIndex: eventsBaseline,
+    eventsBaseline,
   });
-  if (sessionSummary.summary) {
-    completionSummary = sessionSummary.summary;
-    completionSummarySource = sessionSummary.source;
-  }
+  const completionSummary = enriched.summary;
+  const completionSummarySource = enriched.source;
 
-  const terminalManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, {
-    status: completion.status,
-    summary: completionSummary,
-    exitCode: completion.exitCode,
+  const now = () => new Date().toISOString();
+  const updates = buildManifestUpdates({
+    completion,
+    completionSummary: enriched,
+    activeManifest: manifest,
+    now,
   });
+  const terminalManifest = await plan.stateStore.updateLaunchRecord(plan.launchId, updates);
 
   const closePane = services.closePane ?? defaultClosePane;
   if (manifest.closePaneOnCompletion !== false) {
     try { closePane({ backend: manifest.backend, paneId: newPaneId }); } catch { /* best effort */ }
   }
 
-  return shapeResumeResult({
+  const baseResult = shapeResumeResult({
     manifest: terminalManifest,
     request,
     paneVisible: false,
     summarySource: completionSummarySource,
   });
+  return completion.status === "ping"
+    ? shapePingResult({ baseResult, completion })
+    : baseResult;
 }
 
 async function openResumePane({ manifest, request, services }) {
+  const extraPrompt = (typeof request.task === "string" && request.task.length > 0) ? request.task : null;
   const openPaneAndSendCommand = services.openPaneAndSendCommand ?? request.openPaneAndSendCommand;
   if (typeof openPaneAndSendCommand === "function") {
     const result = await openPaneAndSendCommand({
       backend: manifest.backend,
       copilotSessionId: manifest.copilotSessionId,
-      task: request.task,
+      task: extraPrompt,
       request,
     });
     return { paneId: result?.paneId ?? manifest.paneId, sessionId: result?.sessionId ?? null };
@@ -228,7 +228,7 @@ async function openResumePane({ manifest, request, services }) {
       request,
       paneId: pane.paneId,
       agentIdentifier: manifest.agentIdentifier,
-      task: request.task ?? "",
+      task: extraPrompt,
       copilotSessionId: manifest.copilotSessionId,
       interactive: false,
     });
@@ -242,6 +242,10 @@ async function openResumePane({ manifest, request, services }) {
 }
 
 export async function resumeSubagent({ request = {}, services = {} } = {}) {
+  request = {
+    ...request,
+    stateDir: request.stateDir ?? resolveStateDir({ projectRoot: request.projectRoot }),
+  };
   const plan = await planResumeSession({ request, services });
   if (!plan.ok) {
     return plan;
@@ -271,7 +275,7 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
 
   try {
     // Step 2: Verify pane is dead (skip for terminal statuses — manifest is authoritative)
-    const isTerminalStatus = manifest.status === "success" || manifest.status === "failed" || manifest.status === "timeout";
+    const isTerminalStatus = manifest.status === "success" || manifest.status === "failure" || manifest.status === "timeout";
     if (!isTerminalStatus) {
       const probeSessionLiveness = services.probeSessionLiveness ?? defaultProbeSessionLiveness;
       if (probeSessionLiveness({ backend: manifest.backend, paneId: manifest.paneId, services })) {
@@ -292,8 +296,27 @@ export async function resumeSubagent({ request = {}, services = {} } = {}) {
       services,
     });
 
-    // Step 4: Clean up stale signal file
-    cleanupStaleSignalFile({ copilotSessionId: manifest.copilotSessionId, stateDir: request.stateDir, services });
+    // Step 4 (D5.2): legacy signal file no longer exists; nothing to clean up.
+
+    // Step 4b (D2.5): if previous exit was a ping, delete its sidecar + mark respondedAt + reset lastExitType.
+    if (manifest.lastExitType === "ping") {
+      const deleteSidecar = services.deleteExitSidecar ?? defaultDeleteExitSidecar;
+      try {
+        deleteSidecar({ launchId: manifest.launchId, stateDir: request.stateDir, services });
+      } catch { /* best effort: stale sidecar removal must not block resume */ }
+      const pingHistory = [...(manifest.pingHistory ?? [])];
+      if (pingHistory.length > 0) {
+        const last = pingHistory[pingHistory.length - 1];
+        pingHistory[pingHistory.length - 1] = {
+          ...last,
+          respondedAt: services.now?.() ?? new Date().toISOString(),
+        };
+      }
+      await plan.stateStore.updateLaunchRecord(plan.launchId, {
+        pingHistory,
+        lastExitType: null,
+      });
+    }
 
     // Step 5: Open new pane + send resume command
     const resumePane = await openResumePane({ manifest, request, services });
