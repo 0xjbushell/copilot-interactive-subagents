@@ -4,7 +4,45 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] — 2026-04-14
+## [2.0.0] — 2026-04-21
+
+Second major release. Adds bidirectional parent↔child communication, sidecar-based IPC, and a hardened tool-access model. **Breaking**: manifest v2 → v3 hard cutover (no migration); pre-v2 launches cannot be resumed.
+
+### ✨ Features
+
+- **`caller_ping` (child-only tool)** — a child can pause itself and signal the parent that it needs input. Parent observes `status: "ping"`, `summary: null`, `exitCode: 0`, and a `ping: { message }` field, then continues the child via `resume({ launchId, task: "<answer>" })`. Same launchId supports multiple ping→resume cycles. (D2.1, D2.5)
+- **`resume({ task })`** — inject a follow-up instruction when resuming a session. `task: ""` and omitted `task` converge to "no extra prompt". Both cmux and pane delivery paths converge on the same task semantics. (D2.4)
+- **Exit-sidecar IPC** — `subagent_done` and `caller_ping` now write structured JSON sidecars at `<workspace>/.copilot-interactive-subagents/exit/<launchId>.json`. Replaces the old `done/<sessionId>` signal-file mechanism. Sidecar is the source of truth; pane scrape and session events are fallbacks. (D1.1, D2.2, D2.3, D3.1)
+- **Tool access control** — child sessions only see `subagent_done` and `caller_ping`. Parent spawning tools (`copilot_subagent_*`) are stripped at registration time, preventing runaway recursion. Gated on `COPILOT_SUBAGENT_LAUNCH_ID`. (D4.1)
+- **Manifest v3** — adds `copilotSessionId` (pre-generated UUID) and `protocolVersion: 3`. Defense-in-depth rejection of non-v3 manifests via `MANIFEST_VERSION_UNSUPPORTED`. (D1.2)
+- **Parallel aggregation: `ping` is non-failure** — `[success, ping]` → `success`; `[failure, ping]` → `partial-success`. Snapshot adds `pingCount`. (D5.1)
+
+### 🐛 Fixes
+
+- `withToolTimeout` now distinguishes timeout vs. error vs. completion in its result discriminator instead of conflating all into a single value. (D1.2)
+- `subagent_done({ summary: "" })` and whitespace-only summaries normalize to `null` so pane-scrape fallback fires correctly. (D3.1)
+
+### 🧹 Removed
+
+- `writeSignalFile` and the `done/<sessionId>` directory contract are deleted. The sidecar IPC primitive replaces them entirely. (D5.2)
+- Legacy `enrichCompletionSummary` precedence (session-events first) inverted: sidecar > pane scrape > session events. (D2.3)
+
+### 📐 Spec & Skills
+
+- Spec: `specs/subagents/interactive-subagents-v2.md` (formal); locked decisions in `specs/decisions/interactive-subagents-v2-decisions.md`.
+- `using-copilot-interactive-subagents` skill rewritten for v2: documents `caller_ping`, `resume({ task })`, ping status, parallel aggregation, child-only tool gating, new error codes (`RESUME_UNSUPPORTED`, `MANIFEST_VERSION_UNSUPPORTED`, `STATE_DIR_MISSING`, `TOOL_TIMEOUT`).
+- New `developing-copilot-interactive-subagents` skill: captures the TDD + quality-gates + code-simplification workflow used for v2.
+
+### ✅ Quality
+
+- 266 unit tests, 6 integration tests, 27 E2E tests (tmux + zellij), 68/68 mutants killed. All `lib/*.mjs` modules under CRAP 8.
+
+### ⚠️ Migration
+
+- **No automatic migration.** Pre-v2 launches surface `MANIFEST_VERSION_UNSUPPORTED` on resume. Re-launch instead.
+- Parent agents that called `subagent_done` from outside a child session will now error — the gate is strict.
+
+
 
 First public release.
 
