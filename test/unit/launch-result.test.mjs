@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
 const launchModule = await importProjectModule(
-  ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/launch.mjs",
   ["enrichCompletionSummary", "buildManifestUpdates", "shapePingResult"],
 );
 const utilsModule = await importProjectModule(
-  ".github/extensions/copilot-interactive-subagents/lib/utils.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/utils.mjs",
   ["isActiveOrSuccessful"],
 );
 

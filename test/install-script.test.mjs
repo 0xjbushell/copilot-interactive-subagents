@@ -185,9 +185,9 @@ test("overwrites an existing install when --force is supplied", async (t) => {
     readFile(
       path.join(
         PROJECT_ROOT,
-        ".github",
-        "extensions",
+        "packages",
         "copilot-interactive-subagents",
+        "extension",
         "extension.mjs",
       ),
       "utf8",
@@ -195,9 +195,9 @@ test("overwrites an existing install when --force is supplied", async (t) => {
     readFile(
       path.join(
         PROJECT_ROOT,
-        ".github",
-        "skills",
-        "using-copilot-interactive-subagents",
+        "packages",
+        "copilot-interactive-subagents",
+        "skill",
         "SKILL.md",
       ),
       "utf8",

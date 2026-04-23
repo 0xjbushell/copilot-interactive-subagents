@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const EXT_PATH = ".github/extensions/copilot-interactive-subagents/extension.mjs";
+const EXT_PATH = "packages/copilot-interactive-subagents/extension/extension.mjs";
 
 async function captureRegisteredTools(env) {
   const SAVE = {
@@ -34,7 +34,7 @@ async function captureRegisteredTools(env) {
 describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
   it("exports the exact 10-name set from tool-schemas.mjs", async () => {
     const { PUBLIC_SPAWNING_TOOL_NAMES } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/tool-schemas.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs",
       ["PUBLIC_SPAWNING_TOOL_NAMES"],
     );
     const expected = [
@@ -72,7 +72,7 @@ describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
 
   it("CHILD (LAUNCH_ID set): NONE of the 10 spawning tools registered", async () => {
     const { PUBLIC_SPAWNING_TOOL_NAMES } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/tool-schemas.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs",
       ["PUBLIC_SPAWNING_TOOL_NAMES"],
     );
     const tools = await captureRegisteredTools({

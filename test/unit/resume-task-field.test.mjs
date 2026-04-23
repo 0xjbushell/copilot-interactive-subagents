@@ -6,8 +6,8 @@ import { join } from "node:path";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const RESUME_MODULE = ".github/extensions/copilot-interactive-subagents/lib/resume.mjs";
-const STATE_MODULE = ".github/extensions/copilot-interactive-subagents/lib/state.mjs";
+const RESUME_MODULE = "packages/copilot-interactive-subagents/extension/lib/resume.mjs";
+const STATE_MODULE = "packages/copilot-interactive-subagents/extension/lib/state.mjs";
 
 async function loadResume() {
   const { resumeSubagent } = await importProjectModule(RESUME_MODULE, ["resumeSubagent"]);
@@ -142,7 +142,7 @@ describe("D2.4: resume task field threading", () => {
 
   it("AC: schema accepts task as optional string in private validation", async () => {
     const { PUBLIC_TOOL_PARAMETER_SCHEMAS } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/tool-schemas.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs",
       ["PUBLIC_TOOL_PARAMETER_SCHEMAS"],
     );
     const resumeSchema = PUBLIC_TOOL_PARAMETER_SCHEMAS.copilot_subagent_resume;

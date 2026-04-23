@@ -16,15 +16,15 @@ describe("D2.5: resumeSubagent stale-ping cleanup", () => {
   it("deletes stale sidecar, marks respondedAt, resets lastExitType", async (t) => {
     const workspacePath = await workspace(t);
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore, createLaunchRecord, METADATA_VERSION } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore", "createLaunchRecord", "METADATA_VERSION"],
     );
     const { sidecarPath } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/exit-sidecar.mjs",
       ["sidecarPath"],
     );
 
@@ -87,11 +87,11 @@ describe("D2.5: resumeSubagent stale-ping cleanup", () => {
   it("does NOT touch sidecar/pingHistory when lastExitType is not ping", async (t) => {
     const workspacePath = await workspace(t);
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore, createLaunchRecord, METADATA_VERSION } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore", "createLaunchRecord", "METADATA_VERSION"],
     );
 

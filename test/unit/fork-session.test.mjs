@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const FORK_PATH = ".github/extensions/copilot-interactive-subagents/lib/fork-session.mjs";
+const FORK_PATH = "packages/copilot-interactive-subagents/extension/lib/fork-session.mjs";
 
 async function createParentSession(t, { copilotHome, sessionId, events = [], yamlContent }) {
   const sessionDir = path.join(copilotHome, "session-state", sessionId);

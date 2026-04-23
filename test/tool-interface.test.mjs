@@ -26,7 +26,7 @@ function extractSection(document, heading) {
 describe("generic tool interface and operator handoff", () => {
   it("exports a documented public tool surface with namespaced tool names", async () => {
     const { PUBLIC_TOOL_NAMES, PUBLIC_TOOL_DEFINITIONS } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["PUBLIC_TOOL_NAMES", "PUBLIC_TOOL_DEFINITIONS"],
     );
 
@@ -47,7 +47,7 @@ describe("generic tool interface and operator handoff", () => {
 
   it("registers namespaced handlers and preserves camelCase aliases for existing callers", async () => {
     const { createExtensionHandlers, PUBLIC_TOOL_NAMES } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers", "PUBLIC_TOOL_NAMES"],
     );
 
@@ -126,7 +126,7 @@ describe("generic tool interface and operator handoff", () => {
 
   it("registers SDK tools through joinSession for live extension discovery", async () => {
     const { registerExtensionSession } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["registerExtensionSession"],
     );
 
@@ -165,7 +165,7 @@ describe("generic tool interface and operator handoff", () => {
 
   it("returns a stable argument-validation error for malformed single-launch requests", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -183,7 +183,7 @@ describe("generic tool interface and operator handoff", () => {
 
   it("returns a stable argument-validation error for malformed resume requests", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -203,7 +203,7 @@ describe("generic tool interface and operator handoff", () => {
 
   it("rejects parallel requests that mix backend targets with a stable machine-readable code", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -228,7 +228,7 @@ describe("generic tool interface and operator handoff", () => {
   it("routes namespaced parallel and resume tools into the dedicated services with normalized arguments", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -328,7 +328,7 @@ describe("generic tool interface and operator handoff", () => {
       readFile(path.resolve("docs/skills-integration.md"), "utf8"),
     ]);
     const { PUBLIC_TOOL_DEFINITIONS } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["PUBLIC_TOOL_DEFINITIONS"],
     );
 

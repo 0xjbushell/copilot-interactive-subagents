@@ -7,7 +7,7 @@
 ## Repository Layout
 
 ```
-.github/extensions/copilot-interactive-subagents/
+packages/copilot-interactive-subagents/extension/
 ├── extension.mjs              # Main entry — tool registration, launch orchestration
 └── lib/
     ├── agents.mjs             # Agent discovery and validation
@@ -43,14 +43,14 @@ specs/                         # Design specifications
 
 | What | Path | Rule |
 |------|------|------|
-| **Extension source** | `.github/extensions/copilot-interactive-subagents/` | ✅ Edit here |
+| **Extension source** | `packages/copilot-interactive-subagents/extension/` | ✅ Edit here |
 | **Installed copy** | `~/.copilot/extensions/copilot-interactive-subagents/` | ❌ Never edit — overwritten on install |
 | **Tests** | `test/` | ✅ Edit here |
 | **Quality targets** | `scripts/quality/targets.mjs` | ✅ Update when adding modules |
 
 **Deploy after changes:**
 ```bash
-cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+cp -r packages/copilot-interactive-subagents/extension ~/.copilot/extensions/copilot-interactive-subagents
 ```
 
 ## Development Workflow

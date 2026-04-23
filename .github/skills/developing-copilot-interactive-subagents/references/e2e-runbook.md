@@ -5,7 +5,7 @@ E2E tests spawn **real copilot sessions** in real tmux/zellij panes. They exerci
 ## Always Deploy First
 
 ```bash
-cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+cp -r packages/copilot-interactive-subagents/extension ~/.copilot/extensions/copilot-interactive-subagents
 npm run test:e2e
 ```
 

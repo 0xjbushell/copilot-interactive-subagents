@@ -15,7 +15,7 @@ describe("Ephemeral pane lifecycle", () => {
   describe("closePane", () => {
     it("GIVEN tmux backend WHEN closePane called THEN executes kill-pane", async () => {
       const { closePane } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/close-pane.mjs",
         ["closePane"],
       );
 
@@ -39,7 +39,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN zellij backend WHEN closePane called THEN executes close-pane with env", async () => {
       const { closePane } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/close-pane.mjs",
         ["closePane"],
       );
 
@@ -61,7 +61,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN pane already dead WHEN closePane called THEN returns ok with alreadyClosed", async () => {
       const { closePane } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/close-pane.mjs",
         ["closePane"],
       );
 
@@ -79,7 +79,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN unknown backend WHEN closePane called THEN throws structured error", async () => {
       const { closePane } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/close-pane.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/close-pane.mjs",
         ["closePane"],
       );
 
@@ -93,7 +93,7 @@ describe("Ephemeral pane lifecycle", () => {
   describe("extractSessionSummary", () => {
     it("GIVEN events.jsonl with assistant.message WHEN extracted THEN returns last content", async (t) => {
       const { extractSessionSummary } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
         ["extractSessionSummary"],
       );
 
@@ -124,7 +124,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN empty events.jsonl WHEN extracted THEN returns null summary", async (t) => {
       const { extractSessionSummary } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
         ["extractSessionSummary"],
       );
 
@@ -145,7 +145,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN missing session dir WHEN extracted THEN returns null gracefully", async () => {
       const { extractSessionSummary } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
         ["extractSessionSummary"],
       );
 
@@ -161,7 +161,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN sinceEventIndex WHEN delta mode THEN only considers events after index", async (t) => {
       const { extractSessionSummary } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
         ["extractSessionSummary"],
       );
 
@@ -193,7 +193,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN sinceEventIndex with no new assistant.message WHEN delta mode THEN returns null", async (t) => {
       const { extractSessionSummary } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
         ["extractSessionSummary"],
       );
 
@@ -224,7 +224,7 @@ describe("Ephemeral pane lifecycle", () => {
 
     it("GIVEN truncated JSONL trailing line WHEN extracted THEN valid events still parsed", async (t) => {
       const { extractSessionSummary } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
         ["extractSessionSummary"],
       );
 
@@ -252,11 +252,11 @@ describe("Ephemeral pane lifecycle", () => {
     it("GIVEN autonomous completion WHEN closePaneOnCompletion=true THEN closePane is called", async (t) => {
       const workspacePath = createWorkspace(t);
       const { createExtensionHandlers } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/extension.mjs",
+        "packages/copilot-interactive-subagents/extension/extension.mjs",
         ["createExtensionHandlers"],
       );
       const { createStateStore } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/state.mjs",
         ["createStateStore"],
       );
 
@@ -290,11 +290,11 @@ describe("Ephemeral pane lifecycle", () => {
     it("GIVEN closePaneOnCompletion=false WHEN completion runs THEN pane is NOT closed", async (t) => {
       const workspacePath = createWorkspace(t);
       const { createExtensionHandlers } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/extension.mjs",
+        "packages/copilot-interactive-subagents/extension/extension.mjs",
         ["createExtensionHandlers"],
       );
       const { createStateStore } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/state.mjs",
         ["createStateStore"],
       );
 

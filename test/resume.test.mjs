@@ -16,7 +16,7 @@ async function createTempDir(t, prefix) {
 
 async function writeLaunchRecord({ workspacePath, record }) {
   const { createStateStore } = await importProjectModule(
-    ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+    "packages/copilot-interactive-subagents/extension/lib/state.mjs",
     ["createStateStore"],
   );
 
@@ -30,11 +30,11 @@ describe("resume pane-backed launches from stored metadata", () => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-workspace-");
     const projectRoot = await createTempDir(t, "copilot-interactive-subagents-resume-project-");
     const { planResumeSession } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["planResumeSession"],
     );
     const { createStateIndex } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state-index.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state-index.mjs",
       ["createStateIndex"],
     );
 
@@ -89,11 +89,11 @@ describe("resume pane-backed launches from stored metadata", () => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-missing-workspace-");
     const projectRoot = await createTempDir(t, "copilot-interactive-subagents-resume-index-project-");
     const { planResumeSession } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["planResumeSession"],
     );
     const { createStateIndex } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state-index.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state-index.mjs",
       ["createStateIndex"],
     );
 
@@ -131,7 +131,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("throws MANIFEST_VERSION_UNSUPPORTED when stored metadata uses an unsupported version", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-unsupported-");
     const { planResumeSession } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["planResumeSession"],
     );
 
@@ -159,7 +159,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN manifest.status === \"failure\" WHEN resume runs THEN probeSessionLiveness is NOT called (terminal-status fix)", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-failure-status-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 
@@ -200,11 +200,11 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN prior stored metadata with copilotSessionId WHEN resume runs THEN it creates new pane and returns interactive status", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-success-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -250,11 +250,11 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN no openPaneAndSendCommand WHEN openPane + launchAgentInPane exist THEN resume falls back to composing them", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-fallback-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -309,7 +309,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN stored tmux metadata without copilotSessionId WHEN resume runs THEN it returns RESUME_UNSUPPORTED", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-sessionless-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 
@@ -341,11 +341,11 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN workspace metadata remains WHEN resume runs fire-and-forget THEN it returns immediately with interactive status", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-cross-session-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -389,7 +389,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN session is still active (lock held) WHEN resume is attempted THEN it returns SESSION_ACTIVE", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-active-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 
@@ -431,7 +431,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN stored metadata uses an unsupported backend WHEN resume is attempted THEN it is rejected before any runtime command runs", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-bad-backend-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 
@@ -464,7 +464,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN stored metadata missing required fields WHEN resume is attempted THEN it returns RESUME_TARGET_INVALID", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-missing-fields-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 
@@ -497,7 +497,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN pane still alive WHEN resume is attempted THEN it returns SESSION_ACTIVE", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-alive-pane-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 
@@ -536,7 +536,7 @@ describe("resume pane-backed launches from stored metadata", () => {
   it("GIVEN open pane fails during resume WHEN resume runs THEN it returns a structured failure instead of throwing", async (t) => {
     const workspacePath = await createTempDir(t, "copilot-interactive-subagents-resume-runtime-failure-");
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
 

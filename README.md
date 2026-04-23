@@ -56,7 +56,7 @@ At a high level:
 
 Copilot CLI discovers the extension from one of these locations:
 
-- project-scoped: `.github/extensions/copilot-interactive-subagents/`
+- project-scoped: `packages/copilot-interactive-subagents/extension/`
 - user-scoped/global: `~/.copilot/extensions/copilot-interactive-subagents/`
 
 The entrypoint is:
@@ -202,8 +202,8 @@ node scripts/install.mjs --scope global --force
 The installer always copies both of these assets:
 
 ```text
-.github/extensions/copilot-interactive-subagents/
-.github/skills/using-copilot-interactive-subagents/
+packages/copilot-interactive-subagents/extension/
+packages/copilot-interactive-subagents/skill/
 ```
 
 ### Project-scoped installation
@@ -224,8 +224,8 @@ If you are installing from this repository as the source, an example command is:
 
 ```bash
 mkdir -p /path/to/target-repo/.github/extensions /path/to/target-repo/.github/skills
-cp -R .github/extensions/copilot-interactive-subagents /path/to/target-repo/.github/extensions/
-cp -R .github/skills/using-copilot-interactive-subagents /path/to/target-repo/.github/skills/
+cp -R packages/copilot-interactive-subagents/extension /path/to/target-repo/.github/extensions/copilot-interactive-subagents
+cp -R packages/copilot-interactive-subagents/skill /path/to/target-repo/.github/skills/using-copilot-interactive-subagents
 ```
 
 Then restart Copilot CLI in that repository.
@@ -255,8 +255,8 @@ Example:
 
 ```bash
 mkdir -p ~/.copilot/extensions ~/.copilot/skills
-cp -R .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/
-cp -R .github/skills/using-copilot-interactive-subagents ~/.copilot/skills/
+cp -R packages/copilot-interactive-subagents/extension ~/.copilot/extensions/copilot-interactive-subagents
+cp -R packages/copilot-interactive-subagents/skill ~/.copilot/skills/using-copilot-interactive-subagents
 ```
 
 Then restart Copilot CLI.
@@ -276,7 +276,7 @@ If you are new to the extension, this is the shortest path to a successful first
 
 1. Install the extension and starter skill either:
    - by running `node scripts/install.mjs`, or
-   - in the current repo under `.github/extensions/copilot-interactive-subagents/` plus `.github/skills/using-copilot-interactive-subagents/`, or
+   - per-repo under `<target>/.github/extensions/copilot-interactive-subagents/` plus `<target>/.github/skills/using-copilot-interactive-subagents/`, or
    - globally under `~/.copilot/extensions/copilot-interactive-subagents/` plus `~/.copilot/skills/using-copilot-interactive-subagents/`
 2. Make sure you have a working pane backend:
    - easiest path: install `tmux`
@@ -616,7 +616,7 @@ These were used to validate the implementation along with real interactive Copil
 This repository now includes a starter project skill at:
 
 ```text
-.github/skills/using-copilot-interactive-subagents/SKILL.md
+packages/copilot-interactive-subagents/skill/SKILL.md
 ```
 
 Use it as the default guide for agents that need to delegate through the extension.

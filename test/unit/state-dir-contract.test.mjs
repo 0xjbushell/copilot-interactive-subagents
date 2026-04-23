@@ -4,9 +4,9 @@ import path from "node:path";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const BACKEND_OPS = ".github/extensions/copilot-interactive-subagents/lib/backend-ops.mjs";
-const LAUNCH = ".github/extensions/copilot-interactive-subagents/lib/launch.mjs";
-const RESUME = ".github/extensions/copilot-interactive-subagents/lib/resume.mjs";
+const BACKEND_OPS = "packages/copilot-interactive-subagents/extension/lib/backend-ops.mjs";
+const LAUNCH = "packages/copilot-interactive-subagents/extension/lib/launch.mjs";
+const RESUME = "packages/copilot-interactive-subagents/extension/lib/resume.mjs";
 
 describe("stateDir contract (D1.1 addendum)", () => {
   describe("createDefaultAgentLaunchCommand env propagation", () => {
@@ -273,7 +273,7 @@ describe("stateDir contract (D1.1 addendum)", () => {
   describe("AC13 path agreement (round-trip)", () => {
     it("child writes via env path; parent reads via same path", async () => {
       const { resolveStateDir, writeExitSidecar, readExitSidecar } = await importProjectModule(
-        ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+        "packages/copilot-interactive-subagents/extension/lib/exit-sidecar.mjs",
         ["resolveStateDir", "writeExitSidecar", "readExitSidecar"],
       );
       const { mkdtempSync, rmSync } = await import("node:fs");

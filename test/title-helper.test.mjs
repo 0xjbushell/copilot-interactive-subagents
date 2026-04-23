@@ -6,7 +6,7 @@ import { importProjectModule } from "./helpers/red-harness.mjs";
 describe("pane title helper", () => {
   it("uses runtime title updates when the caller provides a setPaneTitle adapter", async () => {
     const { setSubagentTitle } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/titles.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/titles.mjs",
       ["setSubagentTitle"],
     );
 
@@ -47,7 +47,7 @@ describe("pane title helper", () => {
 
   it("uses the tmux backend command when no runtime adapter is supplied", async () => {
     const { setSubagentTitle } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/titles.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/titles.mjs",
       ["setSubagentTitle"],
     );
 
@@ -82,7 +82,7 @@ describe("pane title helper", () => {
 
   it("returns a stable unsupported-backend error when no default title command exists", async () => {
     const { setSubagentTitle } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/titles.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/titles.mjs",
       ["setSubagentTitle"],
     );
 
@@ -106,7 +106,7 @@ describe("pane title helper", () => {
 
   it("normalizes set-title requests from resume pointers and rejects incomplete targets consistently", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 

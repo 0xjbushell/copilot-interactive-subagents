@@ -6,7 +6,7 @@ import { importProjectModule } from "./helpers/red-harness.mjs";
 describe("agent discovery and exact-name validation", () => {
   it("GIVEN runtime agent enumeration WHEN listing runs THEN it returns exact runtime-recognized identifiers without aliases", async () => {
     const { listRuntimeAgents } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/agents.mjs",
       ["listRuntimeAgents"],
     );
 
@@ -28,7 +28,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN an exact custom-agent identifier WHEN validation runs THEN the identifier is accepted unchanged", async () => {
     const { validateAgentIdentifier } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/agents.mjs",
       ["validateAgentIdentifier"],
     );
 
@@ -51,7 +51,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN aliases, fuzzy text, or role inference WHEN validation runs THEN they are rejected with AGENT_NOT_FOUND", async () => {
     const { validateAgentIdentifier } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/agents.mjs",
       ["validateAgentIdentifier"],
     );
 
@@ -71,7 +71,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN a built-in identifier cannot be enumerated at runtime WHEN it is requested explicitly THEN validation still accepts it", async () => {
     const { validateAgentIdentifier } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/agents.mjs",
       ["validateAgentIdentifier"],
     );
 
@@ -91,7 +91,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN runtime validation is unavailable WHEN a non-built-in identifier is requested THEN a stable validation-unavailable error is returned", async () => {
     const { validateAgentIdentifier } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/agents.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/agents.mjs",
       ["validateAgentIdentifier"],
     );
 
@@ -112,7 +112,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN the default handler wiring WHEN an explicit built-in identifier is launched THEN the built-in allowlist is applied without caller-supplied builtInIdentifiers", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -149,7 +149,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN launch prerequisites succeed WHEN the entrypoint handles a launch request THEN it continues with the validated agent and selected backend", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -192,7 +192,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN the default launch wiring WHEN a request uses agentIdentifier THEN the entrypoint normalizes it for exact-name validation", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -231,7 +231,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN built-in runtime enumeration is unavailable WHEN launch uses agentIdentifier THEN the entrypoint still validates an explicit built-in identifier", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -272,7 +272,7 @@ describe("agent discovery and exact-name validation", () => {
 
   it("GIVEN agent validation fails WHEN launch is requested THEN the entrypoint returns the structured validation error without continuing", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 

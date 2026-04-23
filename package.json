@@ -1,7 +1,7 @@
 {
   "name": "copilot-interactive-subagents",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "type": "module",
   "description": "GitHub Copilot CLI extension that launches subagents into visible tmux/zellij panes with persistent state, resume, fork, and parallel orchestration",
   "keywords": [

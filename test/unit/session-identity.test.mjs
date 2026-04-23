@@ -15,11 +15,11 @@ describe("Session Identity (tracer bullet)", () => {
   it("GIVEN launch WHEN flow completes THEN manifest has copilotSessionId and v2 fields", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -62,11 +62,11 @@ describe("Session Identity (tracer bullet)", () => {
   it("GIVEN tmux backend WHEN command built THEN includes --resume=<UUID>", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -101,11 +101,11 @@ describe("Session Identity (tracer bullet)", () => {
   it("GIVEN default (autonomous) launch WHEN command built THEN uses -p flag", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -136,7 +136,7 @@ describe("Session Identity (tracer bullet)", () => {
 
   it("GIVEN cmux backend WHEN launch plan created THEN copilotSessionId is null", async () => {
     const { planSingleLaunch } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/launch.mjs",
       ["planSingleLaunch"],
     );
 
@@ -153,7 +153,7 @@ describe("Session Identity (tracer bullet)", () => {
   it("GIVEN v2 manifest written WHEN read back THEN all v2 fields round-trip correctly", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createStateStore, createLaunchRecord } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore", "createLaunchRecord"],
     );
 

@@ -16,11 +16,11 @@ describe("golden-path: autonomous launch → complete → resume → verify", ()
   it("GIVEN autonomous launch WHEN sentinel detected THEN manifest reaches terminal state with summary", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -65,11 +65,11 @@ describe("golden-path: autonomous launch → complete → resume → verify", ()
   it("GIVEN completed session WHEN resumed THEN new pane opens and manifest updated", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 

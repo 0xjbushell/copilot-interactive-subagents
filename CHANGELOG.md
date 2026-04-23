@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] — 2026-04-22
+
+Patch release. Repo source layout refactored to fix a tool name clash that prevented `copilot_subagent_*` tools from working when Copilot CLI was launched from inside this repository.
+
+### 🐛 Fixes
+
+- **No more auto-loaded duplicate.** Extension and end-user skill source moved from `.github/extensions/` and `.github/skills/` to `packages/copilot-interactive-subagents/{extension,skill}/`. Copilot CLI auto-discovers `.github/extensions/*/extension.mjs` from cwd, so the previous layout caused the in-repo source to register as a second extension whenever a user `cd`'d into this repo, clashing with the globally-installed copy and breaking tool routing (`External tool name clash: copilot_subagent_list_agents …`). Downstream consumers continue to install via `node scripts/install.mjs` exactly as before; install destinations are unchanged.
+
+### 🧹 Internal
+
+- `scripts/install.mjs` source paths updated to the new `packages/` layout.
+- Release tarball now ships `packages/copilot-interactive-subagents/` instead of separate `.github/extensions/` and `.github/skills/` trees.
+- Quality gates green: 266/266 unit tests, CRAP 0 violations, mutation 68/68 killed.
+
 ## [2.0.0] — 2026-04-21
 
 Second major release. Adds bidirectional parent↔child communication, sidecar-based IPC, and a hardened tool-access model. **Breaking**: manifest v2 → v3 hard cutover (no migration); pre-v2 launches cannot be resumed.

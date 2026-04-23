@@ -65,7 +65,7 @@ Before tagging a new version:
 2. CRAP and mutation gates pass: `npm run test:crap && npm run test:mutation`
 3. E2E tests pass on tmux: `npm run test:e2e`
 4. E2E tests pass on zellij: `ZELLIJ_E2E=1 npm run test:e2e` (from inside zellij)
-5. Deploy locally and smoke test: `cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/`
+5. Deploy locally and smoke test: `cp -r packages/copilot-interactive-subagents/extension ~/.copilot/extensions/`
 6. Update `CHANGELOG.md` with new version section
 7. Tag: `git tag v1.x.x && git push origin v1.x.x`
 
@@ -74,7 +74,7 @@ Before tagging a new version:
 After making changes, deploy the extension to your local Copilot CLI:
 
 ```bash
-cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+cp -r packages/copilot-interactive-subagents/extension ~/.copilot/extensions/copilot-interactive-subagents
 ```
 
 Then start a new `copilot` session to pick up the changes.
@@ -82,7 +82,7 @@ Then start a new `copilot` session to pick up the changes.
 ## Project structure
 
 ```
-.github/extensions/copilot-interactive-subagents/
+packages/copilot-interactive-subagents/extension/
 ├── extension.mjs          # Entry point — tool registration and top-level handlers
 └── lib/                   # Business logic modules (one concern per file)
 

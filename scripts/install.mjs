@@ -139,7 +139,7 @@ function resolveInstallTargets({ globalRoot, projectRoot, scope }) {
   return {
     extension: {
       destinationPath: path.join(installRoot, "extensions", EXTENSION_NAME),
-      sourcePath: path.join(PROJECT_ROOT, ".github", "extensions", EXTENSION_NAME),
+      sourcePath: path.join(PROJECT_ROOT, "packages", EXTENSION_NAME, "extension"),
     },
     installRoot:
       scope === "global"
@@ -148,7 +148,7 @@ function resolveInstallTargets({ globalRoot, projectRoot, scope }) {
     scope,
     skill: {
       destinationPath: path.join(installRoot, "skills", SKILL_NAME),
-      sourcePath: path.join(PROJECT_ROOT, ".github", "skills", SKILL_NAME),
+      sourcePath: path.join(PROJECT_ROOT, "packages", EXTENSION_NAME, "skill"),
     },
   };
 }
