@@ -70,7 +70,7 @@ function createIdFactory(prefix) {
 describe("parallel pane-backed launch orchestration", () => {
   it("plans parallel launches in request order with deterministic pane layout metadata", async () => {
     const { planParallelLaunches } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["planParallelLaunches"],
     );
 
@@ -138,7 +138,7 @@ describe("parallel pane-backed launch orchestration", () => {
 
   it("tracks progress by launchId and preserves request order even when similarly worded summaries finish out of order", async () => {
     const { createParallelProgressTracker } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/progress.mjs",
       ["createParallelProgressTracker"],
     );
 
@@ -210,7 +210,7 @@ describe("parallel pane-backed launch orchestration", () => {
   it("GIVEN three launches, one exits immediately, and two continue WHEN progress is requested during execution THEN each agent remains attributable and visible in request order", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createParallelLaunchController } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["createParallelLaunchController"],
     );
 
@@ -311,7 +311,7 @@ describe("parallel pane-backed launch orchestration", () => {
   it("GIVEN pane creation fails for one child while siblings succeed WHEN the run completes THEN aggregate reporting returns partial success with per-agent exit state intact", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { launchParallelSubagents } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["launchParallelSubagents"],
     );
 
@@ -388,7 +388,7 @@ describe("parallel pane-backed launch orchestration", () => {
   it("GIVEN one child times out while a sibling succeeds WHEN completion is awaited THEN timeout reporting does not block sibling results forever", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { launchParallelSubagents } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["launchParallelSubagents"],
     );
 

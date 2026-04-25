@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const EXT_PATH = ".github/extensions/copilot-interactive-subagents/extension.mjs";
+const EXT_PATH = "packages/copilot-interactive-subagents/extension/extension.mjs";
 
 describe("Explicit completion (subagent_done)", () => {
   describe("subagent_done tool registration", () => {

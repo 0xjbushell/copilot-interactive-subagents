@@ -4,7 +4,7 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 
 const skillPath = path.resolve(
-  ".github/skills/using-copilot-interactive-subagents/SKILL.md",
+  "packages/copilot-interactive-subagents/skill/SKILL.md",
 );
 
 function frontmatter(text) {

@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] — 2026-04-22
+
+Patch release. Source layout refactored to separate the project's own source from Copilot CLI's extension auto-discovery directory, plus a fix for orphaned subagent panes.
+
+### 🐛 Fixes
+
+- **Subagent panes now self-close on child exit (TIX-000058).** Previously, panes only auto-closed in the awaited path (`awaitCompletion: true`). Non-awaited launches and `awaitCompletion: false` callers leaked panes even when `closePaneOnCompletion: true` was set. The child wrapper now reads `$ZELLIJ_PANE_ID`/`$TMUX_PANE` and issues the close-pane command directly when copilot exits — works uniformly for sync, async, interactive (user-/exit), and autonomous launches. The session itself persists in copilot's state-dir, so closing the pane is non-destructive: `copilot_subagent_resume` reopens the conversation in a fresh pane.
+- **No more auto-loaded duplicate extension.** Extension and end-user skill source moved from `.github/extensions/` and `.github/skills/` to `packages/copilot-interactive-subagents/{extension,skill}/`. Copilot CLI auto-discovers `.github/extensions/*/extension.mjs` from cwd, so the previous layout caused the in-repo source to register as a second extension whenever a user `cd`'d into this repo, clashing with the globally-installed copy and breaking tool routing (`External tool name clash: copilot_subagent_list_agents …`). Downstream consumers continue to install via `node scripts/install.mjs` exactly as before; install destinations are unchanged.
+
+### 🧹 Internal
+
+- `scripts/install.mjs` source paths updated to the new `packages/` layout.
+- Release tarball now ships `packages/copilot-interactive-subagents/` instead of separate `.github/extensions/` and `.github/skills/` trees.
+- Quality gates green: 272/272 unit tests, CRAP 0 violations, mutation 68/68 killed.
+
 ## [2.0.0] — 2026-04-21
 
 Second major release. Adds bidirectional parent↔child communication, sidecar-based IPC, and a hardened tool-access model. **Breaking**: manifest v2 → v3 hard cutover (no migration); pre-v2 launches cannot be resumed.

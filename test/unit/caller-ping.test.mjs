@@ -7,9 +7,9 @@ import path from "node:path";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const EXTENSION = ".github/extensions/copilot-interactive-subagents/extension.mjs";
-const EXIT_SIDECAR = ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs";
-const SCHEMAS = ".github/extensions/copilot-interactive-subagents/lib/tool-schemas.mjs";
+const EXTENSION = "packages/copilot-interactive-subagents/extension/extension.mjs";
+const EXIT_SIDECAR = "packages/copilot-interactive-subagents/extension/lib/exit-sidecar.mjs";
+const SCHEMAS = "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs";
 
 let savedEnv;
 function snapshotEnv() {
@@ -59,7 +59,7 @@ describe("D2.1 caller_ping registration + childToolServices plumbing", () => {
   });
 
   it("does NOT export CALLER_PING_TOOL_DEF (runtime def lives only inline)", async () => {
-    const mod = await import(`${process.cwd()}/.github/extensions/copilot-interactive-subagents/lib/tool-schemas.mjs`);
+    const mod = await import(`${process.cwd()}/packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs`);
     assert.equal(mod.CALLER_PING_TOOL_DEF, undefined);
   });
 

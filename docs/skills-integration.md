@@ -5,7 +5,7 @@ This project exposes a generic orchestration layer. Agent Skills should add work
 If you want a ready-made project skill that teaches agents how to use this extension, start with:
 
 ```text
-.github/skills/using-copilot-interactive-subagents/SKILL.md
+packages/copilot-interactive-subagents/skill/SKILL.md
 ```
 
 To install both the extension and this starter skill into either `~/.copilot/` or a target repository, use `node scripts/install.mjs`.

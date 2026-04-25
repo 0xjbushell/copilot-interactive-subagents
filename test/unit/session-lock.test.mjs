@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const LOCK_PATH = ".github/extensions/copilot-interactive-subagents/lib/session-lock.mjs";
+const LOCK_PATH = "packages/copilot-interactive-subagents/extension/lib/session-lock.mjs";
 
 describe("Session lock", () => {
   function createMockFs() {

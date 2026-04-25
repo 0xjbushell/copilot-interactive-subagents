@@ -185,10 +185,10 @@ function stripPanePrefix(paneId) {
 
 export async function createE2EHandlers({ backend, driver, workspacePath }) {
   const { createExtensionHandlers } = await import(
-    path.resolve(".", ".github/extensions/copilot-interactive-subagents/extension.mjs")
+    path.resolve(".", "packages/copilot-interactive-subagents/extension/extension.mjs")
   );
   const { createStateStore } = await import(
-    path.resolve(".", ".github/extensions/copilot-interactive-subagents/lib/state.mjs")
+    path.resolve(".", "packages/copilot-interactive-subagents/extension/lib/state.mjs")
   );
 
   const handlers = await createExtensionHandlers({

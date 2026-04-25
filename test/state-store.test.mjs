@@ -18,7 +18,7 @@ async function createWorkspace(t) {
 describe("launch state persistence", () => {
   it("serializes launch manifests with the required stable fields", async () => {
     const { createLaunchRecord, serializeLaunchRecord } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createLaunchRecord", "serializeLaunchRecord"],
     );
 
@@ -61,7 +61,7 @@ describe("launch state persistence", () => {
   it("updates launch manifests across state transitions without losing stored metadata", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createLaunchRecord, createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createLaunchRecord", "createStateStore"],
     );
 
@@ -115,7 +115,7 @@ describe("launch state persistence", () => {
 
   it("constructs a resume pointer from persisted launch metadata", async () => {
     const { buildResumePointer } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["buildResumePointer"],
     );
 
@@ -149,7 +149,7 @@ describe("launch state persistence", () => {
   it("reads an unfinished launch record from a fresh store instance after the original caller has gone away", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createLaunchRecord, createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createLaunchRecord", "createStateStore"],
     );
 
@@ -178,7 +178,7 @@ describe("launch state persistence", () => {
 
   it("rejects launch identifiers that would escape the manifest store", async () => {
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 

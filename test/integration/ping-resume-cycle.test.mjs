@@ -22,15 +22,15 @@ describe("D2.5: ping → resume(task) → done full cycle", () => {
     const workspacePath = await createWorkspace(t);
 
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore, createLaunchRecord, METADATA_VERSION } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore", "createLaunchRecord", "METADATA_VERSION"],
     );
     const { writeExitSidecar, sidecarPath } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/exit-sidecar.mjs",
       ["writeExitSidecar", "sidecarPath"],
     );
 
@@ -128,15 +128,15 @@ describe("D2.5: ping → resume(task) → done full cycle", () => {
   it("resumeSubagent with awaitCompletion=false still clears stale sidecar and marks respondedAt", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { resumeSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
       ["resumeSubagent"],
     );
     const { createStateStore, createLaunchRecord, METADATA_VERSION } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore", "createLaunchRecord", "METADATA_VERSION"],
     );
     const { sidecarPath } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/exit-sidecar.mjs",
       ["sidecarPath"],
     );
 

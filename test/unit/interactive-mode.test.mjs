@@ -15,11 +15,11 @@ describe("Interactive mode", () => {
   it("GIVEN interactive=true WHEN command built THEN contains -i and not -p or -s", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -50,11 +50,11 @@ describe("Interactive mode", () => {
   it("GIVEN interactive=false WHEN command built THEN contains -p and -s", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -85,11 +85,11 @@ describe("Interactive mode", () => {
   it("GIVEN interactive launch WHEN manifest written THEN status is interactive", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -123,7 +123,7 @@ describe("Interactive mode", () => {
 
   it("GIVEN interactive=true WHEN awaitCompletion not set THEN defaults to false", async () => {
     const { planSingleLaunch } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/launch.mjs",
       ["planSingleLaunch"],
     );
 
@@ -140,7 +140,7 @@ describe("Interactive mode", () => {
 
   it("GIVEN interactive=true and awaitCompletion=true WHEN plan created THEN awaitCompletion is true", async () => {
     const { planSingleLaunch } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/launch.mjs",
       ["planSingleLaunch"],
     );
 
@@ -157,11 +157,11 @@ describe("Interactive mode", () => {
   it("GIVEN default command builder WHEN interactive=true THEN script has -i and no -s", async (t) => {
     const workspacePath = createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 

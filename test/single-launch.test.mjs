@@ -18,7 +18,7 @@ async function createWorkspace(t) {
 describe("single pane-backed launch orchestration", () => {
   it("normalizes a single-launch plan before orchestration begins", async () => {
     const { planSingleLaunch } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/launch.mjs",
       ["planSingleLaunch"],
     );
 
@@ -64,7 +64,7 @@ describe("single pane-backed launch orchestration", () => {
 
   it("prefers an explicit child summary over assistant output or fallback text", async () => {
     const { extractLaunchSummary } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
       ["extractLaunchSummary"],
     );
 
@@ -87,7 +87,7 @@ describe("single pane-backed launch orchestration", () => {
 
   it("derives a deterministic non-empty fallback summary when no clear summary block exists", async () => {
     const { extractLaunchSummary, mapExitState } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
       ["extractLaunchSummary", "mapExitState"],
     );
 
@@ -112,7 +112,7 @@ describe("single pane-backed launch orchestration", () => {
 
   it("maps exit-state flags into stable terminal statuses", async () => {
     const { mapExitState } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/summary.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/summary.mjs",
       ["mapExitState"],
     );
 
@@ -125,11 +125,11 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN a valid backend and exact agent identifier WHEN the single-launch entrypoint runs THEN it opens a visible pane, starts the child agent, and returns pane/session metadata plus the final summary", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -213,7 +213,7 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN the default-wired entrypoint services WHEN launch runs with request runtime adapters THEN it performs Slice 1 work instead of returning ready-to-launch", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -289,11 +289,11 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN default monitor settings WHEN the child sentinel arrives after roughly half a minute of polling THEN launch still succeeds instead of timing out", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { launchSingleSubagent } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/launch.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/launch.mjs",
       ["launchSingleSubagent"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -345,7 +345,7 @@ describe("single pane-backed launch orchestration", () => {
 
   it("GIVEN an attached zellij backend WHEN the default launch path is used THEN explicit backend zellij resolves through attach instead of BACKEND_START_UNSUPPORTED", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -384,15 +384,15 @@ describe("single pane-backed launch orchestration", () => {
   it("writes the optional project-local launch index during launch lifecycle updates", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
     const { createStateIndex } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state-index.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state-index.mjs",
       ["createStateIndex"],
     );
 
@@ -437,11 +437,11 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN the optional project-local index write fails WHEN launch succeeds THEN the workspace manifest remains authoritative", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -490,11 +490,11 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN only low-level default adapter dependencies are injected WHEN launch runs without pane overrides THEN the default entrypoint wiring performs a real launch flow", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -557,7 +557,7 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN default runtime wiring for zellij WHEN a single launch is attempted THEN it uses zellij pane operations to open a visible pane and send the child command", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -617,7 +617,7 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN zellij new-pane omits a pane id WHEN the default launch path runs THEN launch metadata falls back to the pane-id temp file flow", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -692,7 +692,7 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN zellij default launch falls back to pane-id temp-file capture AND the temp file exists empty before the pane id is written WHEN launch proceeds THEN it still reaches running with the captured pane id", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -773,7 +773,7 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN default zellij runtime monitoring and awaitCompletion WHEN pane output contains a completion sentinel and summary THEN launch succeeds without using an invalid dump-screen pane-id flag", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -844,7 +844,7 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN the built-in default Copilot agent WHEN the default launch command is built THEN it omits --agent and uses the base prompt mode", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -895,11 +895,11 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN pane creation succeeds but child launch fails immediately WHEN orchestration handles the error THEN it preserves failure state and inspectable metadata", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -946,11 +946,11 @@ describe("single pane-backed launch orchestration", () => {
   it("GIVEN launch metadata is written before completion WHEN the parent session exits and returns later THEN the unfinished launch record remains readable for inspection", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 

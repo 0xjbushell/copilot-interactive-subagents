@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const EXTENSION = ".github/extensions/copilot-interactive-subagents/extension.mjs";
+const EXTENSION = "packages/copilot-interactive-subagents/extension/extension.mjs";
 
 describe("withToolTimeout discriminates handler errors from timeouts", () => {
   it("propagates handler errors with their original code intact (no TOOL_TIMEOUT wrapping)", async () => {

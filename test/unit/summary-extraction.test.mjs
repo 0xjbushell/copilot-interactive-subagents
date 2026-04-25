@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const SUMMARY_MODULE = ".github/extensions/copilot-interactive-subagents/lib/summary.mjs";
+const SUMMARY_MODULE = "packages/copilot-interactive-subagents/extension/lib/summary.mjs";
 
 async function loadWaiter() {
   const { waitForLaunchCompletion } = await importProjectModule(SUMMARY_MODULE, ["waitForLaunchCompletion"]);

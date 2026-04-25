@@ -16,11 +16,11 @@ describe("interactive launch, fork, and subagent_done lifecycle", () => {
   it("GIVEN interactive launch WHEN pane opens THEN status is interactive and pane stays open", async (t) => {
     const workspacePath = await createWorkspace(t);
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
     const { createStateStore } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state.mjs",
       ["createStateStore"],
     );
 
@@ -60,7 +60,7 @@ describe("interactive launch, fork, and subagent_done lifecycle", () => {
 
   it("GIVEN parallel launch of mixed agents WHEN both planned THEN each gets correct mode", async () => {
     const { planParallelLaunches } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["planParallelLaunches"],
     );
 

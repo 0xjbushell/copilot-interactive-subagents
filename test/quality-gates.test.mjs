@@ -141,8 +141,8 @@ describe("quality gate helpers", () => {
 
     assert.equal(scope.testPattern, "test/resume.test.mjs");
     assert.deepEqual(scope.crapTargets, [
-      ".github/extensions/copilot-interactive-subagents/lib/resume.mjs",
-      ".github/extensions/copilot-interactive-subagents/lib/state-index.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/resume.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state-index.mjs",
     ]);
     assert.ok(scope.mutationTargets.some((mutant) => mutant.id === "resume-workspace-priority"));
     assert.ok(scope.mutationTargets.some((mutant) => mutant.id === "state-index-lookup-entry"));
@@ -165,8 +165,8 @@ describe("quality gate helpers", () => {
       "--test",
       "test/*.test.mjs test/unit/*.test.mjs",
     ]);
-    assert.ok(plan.crapTargets.includes(".github/extensions/copilot-interactive-subagents/extension.mjs"));
-    assert.ok(plan.crapTargets.includes(".github/extensions/copilot-interactive-subagents/lib/titles.mjs"));
+    assert.ok(plan.crapTargets.includes("packages/copilot-interactive-subagents/extension/extension.mjs"));
+    assert.ok(plan.crapTargets.includes("packages/copilot-interactive-subagents/extension/lib/titles.mjs"));
   });
 
   it("builds the shipped default mutation command plan from the committed default scope", () => {

@@ -6,8 +6,8 @@ import path from "node:path";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const STATE_MODULE = ".github/extensions/copilot-interactive-subagents/lib/state.mjs";
-const RESUME_MODULE = ".github/extensions/copilot-interactive-subagents/lib/resume.mjs";
+const STATE_MODULE = "packages/copilot-interactive-subagents/extension/lib/state.mjs";
+const RESUME_MODULE = "packages/copilot-interactive-subagents/extension/lib/resume.mjs";
 
 async function tempDir(t, prefix) {
   const dir = await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -130,7 +130,7 @@ describe("D1.2 manifest v3 contract", () => {
     const projectRoot = await tempDir(t, "index-v2-rejection-project-");
     const { planResumeSession } = await importProjectModule(RESUME_MODULE, ["planResumeSession"]);
     const { createStateIndex } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/state-index.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/state-index.mjs",
       ["createStateIndex"],
     );
 

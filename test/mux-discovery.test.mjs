@@ -9,7 +9,7 @@ import { importProjectModule } from "./helpers/red-harness.mjs";
 describe("mux discovery and launch prerequisites", () => {
   it("GIVEN runtime multiplexers are available WHEN discovery runs THEN it returns launchable supported backends", async () => {
     const { discoverLaunchBackends } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["discoverLaunchBackends"],
     );
 
@@ -51,7 +51,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN multiple active multiplexers WHEN backend selection runs THEN it chooses the same supported backend deterministically before launching", async () => {
     const { resolveLaunchBackend } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["resolveLaunchBackend"],
     );
 
@@ -94,7 +94,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN the user is outside a multiplexer WHEN an auto-startable backend is present THEN selection continues without manual pane setup", async () => {
     const { resolveLaunchBackend } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["resolveLaunchBackend"],
     );
 
@@ -133,7 +133,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN no supported backend can be attached or started WHEN launch prerequisites are checked THEN setup guidance is returned and no orphaned metadata remains", async () => {
     const { resolveLaunchBackend } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["resolveLaunchBackend"],
     );
 
@@ -168,7 +168,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN an active backend attach path fails WHEN launch prerequisites are checked THEN setup guidance is returned and no stale launch metadata is written", async () => {
     const { resolveLaunchBackend } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["resolveLaunchBackend"],
     );
 
@@ -207,7 +207,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN an explicit backend request WHEN that backend cannot be auto-started THEN a backend-specific failure code is returned", async () => {
     const { resolveLaunchBackend } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["resolveLaunchBackend"],
     );
 
@@ -236,7 +236,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN an explicit attached backend request WHEN attach fails THEN launch prerequisite resolution fails instead of starting a nested session", async () => {
     const { resolveLaunchBackend } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["resolveLaunchBackend"],
     );
 
@@ -268,7 +268,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN the extension entrypoint is wired with discovery services WHEN list-agents runs THEN it reports exact agent identifiers alongside launchable backends", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -319,7 +319,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN runtime discovery uses PATH probing WHEN tmux is only available via PATH THEN it still reports tmux as launchable", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -363,7 +363,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN attached zellij env vars and a zellij binary WHEN the default list-agents path runs THEN zellij is reported as an attached supported backend", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -396,7 +396,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN attached zellij env vars but no zellij binary WHEN the default list-agents path runs THEN zellij is not reported as an attached supported backend", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -422,7 +422,7 @@ describe("mux discovery and launch prerequisites", () => {
 
   it("GIVEN attached cmux env vars but no default cmux runtime support WHEN the default list-agents path runs THEN cmux is not reported as an attached supported backend", async () => {
     const { createExtensionHandlers } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["createExtensionHandlers"],
     );
 
@@ -448,7 +448,7 @@ describe("mux discovery and launch prerequisites", () => {
 describe("probeSessionLiveness", () => {
   const loadProbe = async () => {
     const { probeSessionLiveness } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["probeSessionLiveness"],
     );
     return probeSessionLiveness;

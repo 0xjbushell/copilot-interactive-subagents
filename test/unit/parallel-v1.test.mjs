@@ -5,7 +5,7 @@ import { importProjectModule } from "../helpers/red-harness.mjs";
 describe("parallel-v1: v1 param passthrough and backend preference", () => {
   it("GIVEN parallel launch with mixed v1 params WHEN orchestration plans THEN each child gets its own params", async () => {
     const { planParallelLaunches } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["planParallelLaunches"],
     );
 
@@ -70,7 +70,7 @@ describe("parallel-v1: v1 param passthrough and backend preference", () => {
 
   it("GIVEN parallel launch with explicit closePaneOnCompletion override WHEN planned THEN override takes precedence", async () => {
     const { planParallelLaunches } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["planParallelLaunches"],
     );
 
@@ -105,7 +105,7 @@ describe("parallel-v1: v1 param passthrough and backend preference", () => {
 
   it("GIVEN cmux backend WHEN v1 params are provided THEN copilotSessionId is null", async () => {
     const { planParallelLaunches } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/parallel.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/parallel.mjs",
       ["planParallelLaunches"],
     );
 
@@ -139,7 +139,7 @@ describe("parallel-v1: v1 param passthrough and backend preference", () => {
 
   it("GIVEN backend discovery WHEN zellij and tmux are both available THEN zellij is preferred", async () => {
     const { SUPPORTED_BACKENDS } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/lib/mux.mjs",
+      "packages/copilot-interactive-subagents/extension/lib/mux.mjs",
       ["SUPPORTED_BACKENDS"],
     );
 
@@ -156,7 +156,7 @@ describe("parallel-v1: v1 param passthrough and backend preference", () => {
 
   it("GIVEN tool schemas WHEN checking parallel per-launch items THEN v1 params are present", async () => {
     const { PUBLIC_TOOL_PARAMETER_SCHEMAS } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["PUBLIC_TOOL_PARAMETER_SCHEMAS"],
     );
 
@@ -173,7 +173,7 @@ describe("parallel-v1: v1 param passthrough and backend preference", () => {
 
   it("GIVEN tool schemas WHEN checking launch tool THEN closePaneOnCompletion is present", async () => {
     const { PUBLIC_TOOL_PARAMETER_SCHEMAS } = await importProjectModule(
-      ".github/extensions/copilot-interactive-subagents/extension.mjs",
+      "packages/copilot-interactive-subagents/extension/extension.mjs",
       ["PUBLIC_TOOL_PARAMETER_SCHEMAS"],
     );
 

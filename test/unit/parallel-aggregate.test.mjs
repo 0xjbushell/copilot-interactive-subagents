@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
 const { createParallelProgressTracker, deriveAggregateStatus } = await importProjectModule(
-  ".github/extensions/copilot-interactive-subagents/lib/progress.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/progress.mjs",
   ["createParallelProgressTracker", "deriveAggregateStatus"],
 );
 

@@ -71,7 +71,7 @@ npm run test:crap                  # CRAP < 8 for all targets
 npm run test:mutation              # mutation kill rate ≥ 80%
 
 # Deploy to test live
-cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+cp -r packages/copilot-interactive-subagents/extension ~/.copilot/extensions/copilot-interactive-subagents
 
 # Verify copilot sees the extension (start a new copilot session — extensions load at startup)
 copilot -i "list your available tools"
@@ -394,7 +394,7 @@ export async function closePane({ backend, paneId, services = {} }) {
 
 // === How tests inject mocks ===
 
-import { closePane } from "../../.github/extensions/copilot-interactive-subagents/lib/close-pane.mjs";
+import { closePane } from "../../packages/copilot-interactive-subagents/extension/lib/close-pane.mjs";
 
 it("GIVEN tmux backend WHEN closePane called THEN runs kill-pane", async () => {
   const calls = [];

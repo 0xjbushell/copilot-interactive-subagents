@@ -1,6 +1,6 @@
 ---
 name: developing-copilot-interactive-subagents
-description: "Test-first, mutation-validated development workflow for the copilot-interactive-subagents extension. Use when writing, modifying, or refactoring extension code (.github/extensions/copilot-interactive-subagents/) — covers TDD/ATDD with red-harness, dependency injection, the three blocking quality gates (npm test, CRAP, mutation), the test pyramid (unit → integration → E2E), source-of-truth vs installed copy, and ship-gate criteria."
+description: "Test-first, mutation-validated development workflow for the copilot-interactive-subagents extension. Use when writing, modifying, or refactoring extension code (packages/copilot-interactive-subagents/extension/) — covers TDD/ATDD with red-harness, dependency injection, the three blocking quality gates (npm test, CRAP, mutation), the test pyramid (unit → integration → E2E), source-of-truth vs installed copy, and ship-gate criteria."
 ---
 
 # Developing copilot-interactive-subagents
@@ -11,14 +11,14 @@ This skill captures the inner-loop and ship-gate workflow proven across the v2 i
 
 | What | Path | Rule |
 |------|------|------|
-| Extension source | `.github/extensions/copilot-interactive-subagents/` | ✅ Edit here |
+| Extension source | `packages/copilot-interactive-subagents/extension/` | ✅ Edit here |
 | Installed copy | `~/.copilot/extensions/copilot-interactive-subagents/` | ❌ Never edit — overwritten on deploy |
 | Tests | `test/` (legacy flat), `test/unit/` (new), `test/integration/`, `test/e2e/` | ✅ Edit here |
 | Quality targets | `scripts/quality/targets.mjs` | ✅ Update when adding `lib/*.mjs` |
 
 **Deploy step** (only after quality gates pass on the deliverable):
 ```bash
-cp -r .github/extensions/copilot-interactive-subagents ~/.copilot/extensions/copilot-interactive-subagents
+cp -r packages/copilot-interactive-subagents/extension ~/.copilot/extensions/copilot-interactive-subagents
 ```
 
 ## The Inner Loop (per change)

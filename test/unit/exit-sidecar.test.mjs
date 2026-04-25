@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const MOD_PATH = ".github/extensions/copilot-interactive-subagents/lib/exit-sidecar.mjs";
+const MOD_PATH = "packages/copilot-interactive-subagents/extension/lib/exit-sidecar.mjs";
 const EXPORTS = [
   "SIDECAR_VERSION",
   "SIDECAR_DIRNAME",

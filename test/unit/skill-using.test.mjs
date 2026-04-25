@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SKILL_PATH = join(here, "..", "..", ".github", "skills", "using-copilot-interactive-subagents", "SKILL.md");
+const SKILL_PATH = join(here, "..", "..", "packages", "copilot-interactive-subagents", "skill", "SKILL.md");
 const skill = readFileSync(SKILL_PATH, "utf8");
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---/;
