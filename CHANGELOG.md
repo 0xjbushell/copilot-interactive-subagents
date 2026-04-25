@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.0.3] — 2026-04-26
+
+Patch release. Defaults the pane backend to `zellij` so agents stop reaching for `tmux` first.
+
+### 🐛 Fixes
+
+- **Skill now recommends `zellij` by default.** The skill text previously said "Prefer `tmux` by default", which led every agent to pick tmux even though backend auto-resolution in `lib/mux.mjs` already prefers zellij. Skill examples updated to pass `"backend": "zellij"` (and `paneId: "pane:N"` in the set_title sample). `tmux` remains a first-class fallback when zellij isn't available or when the parent already lives inside a tmux session.
+- **Tool schemas surface the new default.** `copilot_subagent_launch`, `copilot_subagent_parallel`, and `copilot_subagent_resume` now describe the `backend` field as "prefer zellij when available, falling back to tmux" and reorder the enum to `cmux | zellij | tmux` so even agents that ignore the skill see the preference.
+
+### 🧹 Internal
+
+- Quality gates green: 274/274 unit tests.
+
 ## [2.0.2] — 2026-04-25
 
 Patch release. Adds child-lifecycle context so interactive subagents know to call `subagent_done`.

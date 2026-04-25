@@ -34,7 +34,7 @@ Use this skill when the repository has the `copilot-interactive-subagents` exten
 
 1. **Discover before launching.** Call `copilot_subagent_list_agents` unless you already know the exact agent identifier and supported backends. `agentIdentifiers` are exact-name only; `github-copilot` is the built-in default.
 
-2. **Choose a backend deliberately.** Prefer `tmux` by default — it can attach or auto-start a server. Use `zellij` only from inside an attached zellij session. `cmux` is supported but has no default pane operations.
+2. **Choose a backend deliberately.** Prefer `zellij` by default — it can attach to an existing session or auto-start one, and renders headless panes reliably. Use `tmux` if zellij isn't available or the parent is already inside a tmux session. `cmux` is supported but has no default pane operations.
 
 3. **Launch with the smallest tool that fits.**
    - `copilot_subagent_launch` — one child agent
@@ -68,7 +68,7 @@ Returns: `agentIdentifiers`, `supportedBackends` (with `attached`/`startable` st
 {
   "agentIdentifier": "github-copilot",
   "task": "Review the current diff and summarize correctness risks.",
-  "backend": "tmux",
+  "backend": "zellij",
   "awaitCompletion": true
 }
 ```
@@ -79,7 +79,7 @@ With interactive mode and fork:
 {
   "agentIdentifier": "github-copilot",
   "task": "Continue debugging the auth failure from the previous session.",
-  "backend": "tmux",
+  "backend": "zellij",
   "interactive": true,
   "fork": { "launchId": "prev-launch-id" }
 }
@@ -100,7 +100,7 @@ resumePointer: object | null
 
 ```json
 {
-  "backend": "tmux",
+  "backend": "zellij",
   "awaitCompletion": true,
   "launches": [
     { "agentIdentifier": "github-copilot", "task": "Inspect the API changes and summarize risks." },
@@ -144,7 +144,7 @@ Resume with a follow-up task (respond to a ping, or steer a completed session):
 ### copilot_subagent_set_title
 
 ```json
-{ "title": "Phase 2: Testing", "backend": "tmux", "paneId": "%5" }
+{ "title": "Phase 2: Testing", "backend": "zellij", "paneId": "pane:5" }
 ```
 
 ## Child-Only Tools

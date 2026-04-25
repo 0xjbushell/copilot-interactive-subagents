@@ -32,7 +32,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     requestShape: {
       agentIdentifier: "string",
       task: "string",
-      backend: "cmux|tmux|zellij (optional)",
+      backend: "cmux|zellij|tmux (optional; defaults to zellij when available, falling back to tmux)",
       awaitCompletion: "boolean (optional, default true)",
       interactive: "boolean (optional, default false — use -i flag, pane stays open)",
       fork: "{ launchId: string } | { copilotSessionId: string } (optional — fork parent session before launch)",
@@ -55,8 +55,8 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     description: "Launch multiple exact-name agents in one shared backend.",
     requestShape: {
       launches:
-        "Array<{ agentIdentifier: string, task: string, backend?: cmux|tmux|zellij, awaitCompletion?: boolean, interactive?: boolean, fork?: { launchId | copilotSessionId }, closePaneOnCompletion?: boolean }>",
-      backend: "cmux|tmux|zellij (optional shared backend override)",
+        "Array<{ agentIdentifier: string, task: string, backend?: cmux|zellij|tmux, awaitCompletion?: boolean, interactive?: boolean, fork?: { launchId | copilotSessionId }, closePaneOnCompletion?: boolean }>",
+      backend: "cmux|zellij|tmux (optional shared backend override; defaults to zellij when available)",
       awaitCompletion: "boolean (optional shared default)",
     },
     resultShape: {
@@ -91,7 +91,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     description: "Update a pane title or operator-facing phase label when the backend supports it.",
     requestShape: {
       title: "string",
-      backend: "cmux|tmux|zellij (or resumePointer.backend)",
+      backend: "cmux|zellij|tmux (or resumePointer.backend)",
       paneId: "string (or resumePointer.paneId)",
     },
     resultShape: {
@@ -123,7 +123,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     properties: {
       agentIdentifier: { type: "string", description: "Exact built-in or custom agent identifier." },
       task: { type: "string", description: "Task text for the child agent." },
-      backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
+      backend: { type: "string", enum: ["cmux", "zellij", "tmux"], description: "Pane backend; prefer zellij when available, falling back to tmux" },
       awaitCompletion: { type: "boolean" },
       interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
       fork: {
@@ -142,7 +142,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     type: "object",
     additionalProperties: false,
     properties: {
-      backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
+      backend: { type: "string", enum: ["cmux", "zellij", "tmux"], description: "Pane backend; prefer zellij when available, falling back to tmux" },
       awaitCompletion: { type: "boolean" },
       launches: {
         type: "array",
@@ -152,7 +152,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
           properties: {
             agentIdentifier: { type: "string" },
             task: { type: "string" },
-            backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
+            backend: { type: "string", enum: ["cmux", "zellij", "tmux"], description: "Pane backend; prefer zellij when available, falling back to tmux" },
             awaitCompletion: { type: "boolean" },
             interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
             fork: {
@@ -206,7 +206,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     type: "object",
     additionalProperties: false,
     properties: {
-      backend: { type: "string", enum: ["cmux", "tmux", "zellij"] },
+      backend: { type: "string", enum: ["cmux", "zellij", "tmux"], description: "Pane backend; prefer zellij when available, falling back to tmux" },
       paneId: { type: "string" },
       title: { type: "string" },
       resumePointer: {
