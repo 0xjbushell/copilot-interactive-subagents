@@ -86,8 +86,8 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           ARCHIVE="copilot-interactive-subagents-${TAG}.tar.gz"
           tar -czf "$ARCHIVE" \
-            .github/extensions/copilot-interactive-subagents/ \
-            .github/skills/using-copilot-interactive-subagents/ \
+            packages/copilot-interactive-subagents/ \
+            scripts/install.mjs \
             README.md \
             LICENSE \
             CHANGELOG.md
