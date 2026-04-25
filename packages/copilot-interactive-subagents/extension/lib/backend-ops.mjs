@@ -240,7 +240,7 @@ export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = 
   const suppressStats = interactive ? "" : ' "-s",';
   const resumeFlag = copilotSessionId ? `"--resume=${copilotSessionId}",` : "";
   const runnerScript = [
-    'const { spawnSync } = require("node:child_process");',
+    'const { spawnSync, spawn } = require("node:child_process");',
     'const decode = (name) => Buffer.from(process.env[name] || "", "base64").toString("utf8");',
     useDefaultCopilotAgent
       ? `const args = [${resumeFlag} "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${suppressStats}];`
@@ -248,6 +248,17 @@ export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = 
     `const result = spawnSync(${JSON.stringify(copilotBinary)}, args, { stdio: "inherit" });`,
     'const code = Number.isInteger(result.status) ? result.status : 1;',
     'process.stdout.write("\\n__SUBAGENT_DONE_" + code + "__\\n");',
+    'try {',
+    '  const zPane = process.env.ZELLIJ_PANE_ID;',
+    '  const tPane = process.env.TMUX_PANE;',
+    '  if (zPane) {',
+    '    const child = spawn("zellij", ["action", "close-pane", "--pane-id", zPane], { detached: true, stdio: "ignore" });',
+    '    child.unref();',
+    '  } else if (tPane) {',
+    '    const child = spawn("tmux", ["kill-pane", "-t", tPane], { detached: true, stdio: "ignore" });',
+    '    child.unref();',
+    '  }',
+    '} catch (_) {}',
     'process.exit(code);',
   ].join("");
 
