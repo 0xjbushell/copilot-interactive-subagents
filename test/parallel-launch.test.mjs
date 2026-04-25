@@ -47,7 +47,7 @@ function createDeferred() {
   return { promise, resolve };
 }
 
-async function waitFor(assertion, { attempts = 100 } = {}) {
+async function waitFor(assertion, { attempts = 500, delayMs = 2 } = {}) {
   let lastError = null;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -55,7 +55,7 @@ async function waitFor(assertion, { attempts = 100 } = {}) {
       return assertion();
     } catch (error) {
       lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
 

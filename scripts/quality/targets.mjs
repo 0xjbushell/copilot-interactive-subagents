@@ -429,14 +429,26 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "extension-d41-child-filter-gate",
     file: "packages/copilot-interactive-subagents/extension/extension.mjs",
-    from: "  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    // The childToolServices seam",
-    to: "  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    // The childToolServices seam",
+    from: "  if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {\n    systemMessage = { mode: \"append\", content: CHILD_LIFECYCLE_PROMPT };",
+    to: "  if (process.env.COPILOT_SUBAGENT_SESSION_ID) {\n    systemMessage = { mode: \"append\", content: CHILD_LIFECYCLE_PROMPT };",
   },
   {
     id: "extension-d41-child-filter-applied",
     file: "packages/copilot-interactive-subagents/extension/extension.mjs",
     from: 'tools = tools.filter((tool) => !PUBLIC_SPAWNING_TOOL_NAMES.has(tool.name));',
     to: '/* filter disabled */;',
+  },
+  {
+    id: "extension-tix59-child-lifecycle-prompt-empty",
+    file: "packages/copilot-interactive-subagents/extension/extension.mjs",
+    from: 'systemMessage = { mode: "append", content: CHILD_LIFECYCLE_PROMPT };',
+    to: 'systemMessage = { mode: "append", content: "" };',
+  },
+  {
+    id: "extension-tix59-child-lifecycle-prompt-mode-replace",
+    file: "packages/copilot-interactive-subagents/extension/extension.mjs",
+    from: 'systemMessage = { mode: "append", content: CHILD_LIFECYCLE_PROMPT };',
+    to: 'systemMessage = { mode: "replace", content: CHILD_LIFECYCLE_PROMPT };',
   },
 ];
 

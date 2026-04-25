@@ -8,6 +8,13 @@ import { importProjectModule } from "../helpers/red-harness.mjs";
 
 const EXT_PATH = "packages/copilot-interactive-subagents/extension/extension.mjs";
 
+async function waitForFile(filePath, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && !existsSync(filePath)) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 describe("Self-close pane on child exit (TIX-000058)", () => {
   describe("runner script content", () => {
     it("GIVEN any launch WHEN command built THEN runner script reads ZELLIJ_PANE_ID and TMUX_PANE env vars", async () => {
@@ -75,11 +82,7 @@ describe("Self-close pane on child exit (TIX-000058)", () => {
       });
 
       assert.equal(result.status, 0, `runner failed: ${result.stderr?.toString()}`);
-      // Allow detached close-pane to fire
-      const deadline = Date.now() + 2000;
-      while (Date.now() < deadline && !existsSync(recordPath)) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
+      await waitForFile(recordPath);
       assert.ok(existsSync(recordPath), "zellij stub was not invoked");
       const log = readFileSync(recordPath, "utf8");
       assert.ok(log.includes("close-pane"), `log missing close-pane: ${log}`);
@@ -102,10 +105,7 @@ describe("Self-close pane on child exit (TIX-000058)", () => {
       });
 
       assert.equal(result.status, 0, `runner failed: ${result.stderr?.toString()}`);
-      const deadline = Date.now() + 2000;
-      while (Date.now() < deadline && !existsSync(recordPath)) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
+      await waitForFile(recordPath);
       assert.ok(existsSync(recordPath), "tmux stub was not invoked");
       const log = readFileSync(recordPath, "utf8");
       assert.ok(log.includes("kill-pane"), `log missing kill-pane: ${log}`);
