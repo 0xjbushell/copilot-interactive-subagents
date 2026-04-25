@@ -51,6 +51,15 @@ export { createDefaultAgentLaunchCommand };
 export { PUBLIC_TOOL_NAMES, PUBLIC_TOOL_DEFINITIONS, PUBLIC_TOOL_PARAMETER_SCHEMAS };
 
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];
+
+const CHILD_LIFECYCLE_PROMPT = [
+  "You are a subagent spawned by a parent Copilot agent. Your session has a defined lifecycle:",
+  "- When you have completed the user's task, OR you cannot make further progress, call `subagent_done` with a brief summary of what you did or learned.",
+  "- If you need clarification or input from the parent before continuing, call `caller_ping` with your question and end your turn.",
+  "- The pane you are running in will close automatically when you exit. The parent can resume this session at any time and send a follow-up task — so calling `subagent_done` is recoverable.",
+  "- Do not call `subagent_done` while you are still actively working — only when the work is genuinely done or blocked.",
+].join("\n");
+
 const DEFAULT_SUPPORTED_STARTUP = {
   cmux: false,
   tmux: true,
@@ -519,10 +528,12 @@ export async function registerExtensionSession(options = {}) {
   });
 
   let tools = buildSdkTools(handlers);
+  let systemMessage;
 
   // D4.1 + caller_ping + subagent_done: all child-only behavior gates on
   // COPILOT_SUBAGENT_LAUNCH_ID. Single block so the contract is obvious.
   if (process.env.COPILOT_SUBAGENT_LAUNCH_ID) {
+    systemMessage = { mode: "append", content: CHILD_LIFECYCLE_PROMPT };
     // The childToolServices seam is fs-shaped (writeFileSync/mkdirSync/
     // renameSync/now) for exit-sidecar IO. Tests inject overrides; production
     // falls through to module defaults inside writeExitSidecar.
@@ -598,7 +609,7 @@ export async function registerExtensionSession(options = {}) {
     });
   }
 
-  session = await joinSession({ tools });
+  session = await joinSession({ tools, systemMessage });
 
   return session;
 }

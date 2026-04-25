@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] — 2026-04-25
+
+Patch release. Adds child-lifecycle context so interactive subagents know to call `subagent_done`.
+
+### 🐛 Fixes
+
+- **Interactive subagents now reliably call `subagent_done` (TIX-000059).** Previously, child sessions only had the tool's parameter description as context for when to use it. In `-p` (autonomous) mode this didn't matter — copilot exited naturally when the prompt completed. In `-i` (interactive) mode the child idled in a REPL between turns with no terminal condition, never reaching `subagent_done`, so panes never self-closed via the TIX-000058 path. The extension now appends a brief lifecycle preamble to the child's system prompt (via SDK `systemMessage.append`) when `COPILOT_SUBAGENT_LAUNCH_ID` is set, telling the child it is a subagent, when to call `subagent_done` vs. `caller_ping`, and that the parent can resume. Append mode preserves all SDK guardrails. Parent sessions are unaffected.
+
+### 🧹 Internal
+
+- Quality gates green: 274/274 unit tests, CRAP 0 violations, mutation 70/70 killed.
+
 ## [2.0.1] — 2026-04-22
 
 Patch release. Source layout refactored to separate the project's own source from Copilot CLI's extension auto-discovery directory, plus a fix for orphaned subagent panes.
