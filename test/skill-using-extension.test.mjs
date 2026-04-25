@@ -41,8 +41,8 @@ test("project skill documents the core tool workflow and operating constraints",
 
   assert.match(skill, /exact-name only/i);
   assert.match(skill, /github-copilot/);
-  assert.match(skill, /Prefer `tmux` by default/);
-  assert.match(skill, /Use `zellij` only from inside an attached zellij session/);
+  assert.match(skill, /Prefer `zellij` by default/);
+  assert.match(skill, /Use `tmux` if zellij isn't available/);
   assert.match(skill, /awaitCompletion: true/);
   assert.match(skill, /launchId|resumePointer/);
   assert.match(skill, /AGENT_NOT_FOUND/);
