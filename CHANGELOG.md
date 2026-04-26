@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.0.4] — 2026-04-27
+
+Patch release. Fixes two production bugs causing pane leaks and tool-call timeouts in long-running subagent sessions.
+
+### 🐛 Fixes
+
+- **Runner now closes its pane on signal exit (SIGTERM/SIGINT/SIGHUP).** Previously the close-pane wrapper only fired on a normal `copilot` exit, so any signal-killed child left an orphaned `Terminated` pane (observed in anvil and minionctl real sessions). Runner now registers signal handlers that map POSIX signums to exit codes (143/130/129) and call the close action via `spawnSync` with a 2s timeout, guarded by an idempotent `closePaneOnce` helper so success-path + signal-path can't double-close.
+- **Default tool timeout raised from 90s to 30min.** Blocking launches frequently exceeded the old 90-second budget when child agents were doing real work, returning misleading `TOOL_TIMEOUT` errors with the child still running. Override via `COPILOT_SUBAGENT_TOOL_TIMEOUT_MS` (parsed by new `resolveToolTimeoutMs`; invalid/empty/≤0 falls back to default).
+- **Error path now reaps panes when `closePaneOnCompletion: true`.** `handleLaunchError` previously left panes open on timeout/failure even when the caller had opted into auto-close, mirroring only the success path. Added a small `reapPaneIfRequested` helper that mirrors the success-path reap.
+
+### 🧹 Internal
+
+- 8 new unit tests across `runner-signal-handling`, `tool-timeout`, `launch-error-pane-reap`.
+- Quality gates green: 282/282 unit tests, CRAP 165/165 ≤ 8, mutation 100% (70/70 killed).
+
 ## [2.0.3] — 2026-04-26
 
 Patch release. Defaults the pane backend to `zellij` so agents stop reaching for `tmux` first.
