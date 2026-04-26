@@ -334,6 +334,7 @@ async function handleLaunchError({
   stateIndex,
   pendingManifest,
   paneVisible,
+  closePane,
 }) {
   if (!pendingManifest) {
     return createPrelaunchFailure({
@@ -373,13 +374,29 @@ async function handleLaunchError({
     request,
   });
 
+  // Bug C fix: mirror the success-path pane reap so timed-out / failed
+  // launches don't leak orphaned panes when the user opted into auto-close.
+  const paneStillVisible = reapPaneIfRequested({ plan, closePane, paneId: pendingManifest?.paneId, paneVisible });
+
   return shapeLaunchResult({
     manifest: failedManifest,
     request,
     launchAction: plan.launchAction,
-    paneVisible,
+    paneVisible: paneStillVisible,
     summarySource: summary.source,
   });
+}
+
+function reapPaneIfRequested({ plan, closePane, paneId, paneVisible }) {
+  if (!plan.closePaneOnCompletion || typeof closePane !== "function" || !paneId) {
+    return paneVisible;
+  }
+  try {
+    closePane({ backend: plan.backend, paneId });
+    return false;
+  } catch {
+    return paneVisible;
+  }
 }
 
 export function planSingleLaunch({
@@ -503,6 +520,7 @@ export async function launchSingleSubagent({
       stateIndex: dependencies.stateIndex,
       pendingManifest,
       paneVisible,
+      closePane: dependencies.closePane,
     });
   }
 }

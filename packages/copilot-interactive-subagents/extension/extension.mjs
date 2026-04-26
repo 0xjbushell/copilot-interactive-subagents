@@ -366,9 +366,23 @@ function toToolResult(result) {
   };
 }
 
-const DEFAULT_TOOL_TIMEOUT_MS = 90_000;
+// Default tool timeout. Blocking subagent launches commonly run for many
+// minutes (real implementation tasks, full quality-gate sweeps, etc.), so a
+// short timeout would cancel legitimate long-running work and orphan the child
+// pane. 30 minutes is a safe upper bound for the default; operators can shrink
+// or extend it via the COPILOT_SUBAGENT_TOOL_TIMEOUT_MS env var.
+export const DEFAULT_TOOL_TIMEOUT_MS = 30 * 60_000;
+
+export function resolveToolTimeoutMs(env = process.env) {
+  const raw = env.COPILOT_SUBAGENT_TOOL_TIMEOUT_MS;
+  if (raw === undefined || raw === null || raw === "") return DEFAULT_TOOL_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_TOOL_TIMEOUT_MS;
+  return Math.floor(parsed);
+}
 
 export async function withToolTimeout(toolName, handler, args) {
+  const timeoutMs = resolveToolTimeoutMs();
   let timer;
   let timedOut = false;
   try {
@@ -378,9 +392,9 @@ export async function withToolTimeout(toolName, handler, args) {
         timer = setTimeout(
           () => {
             timedOut = true;
-            reject(new Error(`Tool ${toolName} timed out after ${DEFAULT_TOOL_TIMEOUT_MS}ms`));
+            reject(new Error(`Tool ${toolName} timed out after ${timeoutMs}ms`));
           },
-          DEFAULT_TOOL_TIMEOUT_MS,
+          timeoutMs,
         );
         if (timer.unref) timer.unref();
       }),
