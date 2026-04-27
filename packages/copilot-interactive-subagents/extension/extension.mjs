@@ -1,4 +1,5 @@
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 import {
   listRuntimeAgents as defaultListRuntimeAgents,
@@ -16,7 +17,7 @@ import { resumeSubagent as defaultContinueResume } from "./lib/resume.mjs";
 import { createStateStore as buildDefaultStateStore } from "./lib/state.mjs";
 import { createStateIndex as buildDefaultStateIndex } from "./lib/state-index.mjs";
 import { setSubagentTitle as defaultContinueSetTitle } from "./lib/titles.mjs";
-import { uniqueStable } from "./lib/utils.mjs";
+import { uniqueStable, stripPanePrefix } from "./lib/utils.mjs";
 import {
   resolveCommandPath,
   createDefaultAgentLaunchCommand,
@@ -364,9 +365,8 @@ async function handleSend(request, services) {
     message,
     services: {
       readLaunchRecord: (id) => stateStore.readLaunchRecord(id),
-      probeBackendAvailable: async (backend) => {
+      probeBackendAvailable: (backend) => {
         try {
-          const { spawnSync } = await import("node:child_process");
           if (backend === "tmux") {
             return spawnSync("tmux", ["info"], { stdio: "ignore" }).status === 0;
           }
@@ -384,8 +384,7 @@ async function handleSend(request, services) {
           await runDefaultBackendCommand({ request, backend, args: ["send-keys", "-t", paneId, "-l", payload] });
           await runDefaultBackendCommand({ request, backend, args: ["send-keys", "-t", paneId, "Enter"] });
         } else if (backend === "zellij") {
-          const numericId = (await import("./lib/utils.mjs")).stripPanePrefix(paneId);
-          await runDefaultBackendCommand({ request, backend, args: ["action", "write-chars", "--pane-id", numericId, `${payload}\n`] });
+          await runDefaultBackendCommand({ request, backend, args: ["action", "write-chars", "--pane-id", stripPanePrefix(paneId), `${payload}\n`] });
         } else {
           throw new Error(`Unsupported backend: ${backend}`);
         }
@@ -682,7 +681,7 @@ export async function registerExtensionSession(options = {}) {
         });
         return {
           ok: true,
-          message: "Task marked complete. Session ending.",
+          message: "Session is terminating. Do not call further tools. End your turn.",
         };
       },
     });
