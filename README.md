@@ -38,6 +38,7 @@ The extension registers five tools:
 - `copilot_subagent_parallel`
 - `copilot_subagent_resume`
 - `copilot_subagent_set_title`
+- `copilot_subagent_read_messages`
 
 Existing camelCase aliases remain available for compatibility, but new integrations should use the namespaced tool names above.
 
@@ -564,6 +565,32 @@ Result:
   "title": "Investigating failures",
   "applied": true,
   "source": "backend-command"
+}
+```
+
+### `copilot_subagent_read_messages`
+
+Read new messages from a child agent since the last cursor position.
+
+Request:
+
+```json
+{
+  "launchId": "lch_abc123",
+  "sinceCursor": 0
+}
+```
+
+Result:
+
+```json
+{
+  "ok": true,
+  "messages": [
+    { "type": "message", "message": "Progress update", "writtenAt": "2026-01-01T00:00:00Z", "cursor": 128 }
+  ],
+  "nextCursor": 128,
+  "hasMore": false
 }
 ```
 

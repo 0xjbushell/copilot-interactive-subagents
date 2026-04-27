@@ -36,6 +36,7 @@ describe("generic tool interface and operator handoff", () => {
       "copilot_subagent_parallel",
       "copilot_subagent_resume",
       "copilot_subagent_set_title",
+      "copilot_subagent_read_messages",
     ]);
     assert.deepEqual(
       PUBLIC_TOOL_DEFINITIONS.map((definition) => definition.name),
@@ -153,12 +154,13 @@ describe("generic tool interface and operator handoff", () => {
           copilot_subagent_parallel: async () => ({ ok: true }),
           copilot_subagent_resume: async () => ({ ok: true }),
           copilot_subagent_set_title: async () => ({ ok: true }),
+          copilot_subagent_read_messages: async () => ({ ok: true }),
         };
       },
     });
 
     assert.equal(result, session);
-    assert.equal(joinConfig.tools.length, 10);
+    assert.equal(joinConfig.tools.length, 12);
     assert.ok(joinConfig.tools.some((tool) => tool.name === "copilot_subagent_launch"));
     assert.ok(joinConfig.tools.some((tool) => tool.name === "copilotSubagentLaunch"));
   });

@@ -28,7 +28,8 @@ import {
   defaultStartBackendForRuntime,
 } from "./lib/backend-ops.mjs";
 import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
-import { appendPing } from "./lib/ping-sidecar.mjs";
+import { appendPing, readPingsSince as readPingsSinceFromLib } from "./lib/ping-sidecar.mjs";
+import { readMessages } from "./lib/read-messages.mjs";
 import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_TOOL_DEFINITIONS,
@@ -352,6 +353,21 @@ async function handleSetTitle(request, services) {
   });
 }
 
+async function handleReadMessages(request, services) {
+  const { launchId, sinceCursor } = request;
+  const stateStore = services.createStateStore(request);
+  return readMessages({
+    launchId,
+    sinceCursor,
+    services: {
+      readLaunchRecord: (id) => stateStore.readLaunchRecord(id),
+      updateLaunchRecord: (id, updates) => stateStore.updateLaunchRecord(id, updates),
+      readPingsSince: readPingsSinceFromLib,
+      stateDir: resolveStateDir({ projectRoot: services.projectRoot?.() ?? process.cwd() }),
+    },
+  });
+}
+
 function buildHandlerAliases(handlers) {
   return Object.fromEntries(
     Object.entries(CAMELCASE_HANDLER_NAMES).map(([namespacedName, camelCaseName]) => [
@@ -493,6 +509,9 @@ export async function createExtensionHandlers(overrides = {}) {
     },
     async copilot_subagent_set_title(request = {}) {
       return handleSetTitle(request, services);
+    },
+    async copilot_subagent_read_messages(request = {}) {
+      return handleReadMessages(request, services);
     },
   };
 

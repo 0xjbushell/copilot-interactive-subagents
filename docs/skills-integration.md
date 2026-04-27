@@ -187,6 +187,30 @@ Returns:
 }
 ```
 
+### `copilot_subagent_read_messages`
+
+Read new messages from a child agent since the last cursor position. Omit `sinceCursor` to resume from the manifest's stored cursor.
+
+```json
+{
+  "launchId": "lch_abc123",
+  "sinceCursor": 0
+}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "messages": [
+    { "type": "message", "message": "Progress update", "writtenAt": "2026-01-01T00:00:00Z", "cursor": 128 }
+  ],
+  "nextCursor": 128,
+  "hasMore": false
+}
+```
+
 ## Handoff guidance for skills
 
 - Keep prompts generic: the extension only needs an exact agent identifier and task text.

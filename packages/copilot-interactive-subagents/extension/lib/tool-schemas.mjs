@@ -9,6 +9,7 @@ export const PUBLIC_TOOL_NAMES = [
   "copilot_subagent_parallel",
   "copilot_subagent_resume",
   "copilot_subagent_set_title",
+  "copilot_subagent_read_messages",
 ];
 
 export const PUBLIC_TOOL_DEFINITIONS = [
@@ -103,6 +104,20 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       title: "string",
       applied: "boolean",
       source: "backend-command|runtime",
+    },
+  },
+  {
+    name: "copilot_subagent_read_messages",
+    description: "Read new messages from a child agent since the last cursor position.",
+    requestShape: {
+      launchId: "string",
+      sinceCursor: "integer (optional byte offset; omit to use manifest cursor)",
+    },
+    resultShape: {
+      ok: "boolean",
+      messages: "Array<{ type, message, writtenAt, cursor }>",
+      nextCursor: "integer",
+      hasMore: "boolean",
     },
   },
 ];
@@ -225,6 +240,15 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     },
     required: ["title"],
   },
+  copilot_subagent_read_messages: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      launchId: { type: "string", description: "Launch ID of the child to read messages from." },
+      sinceCursor: { type: "integer", description: "Byte offset to read from. Omit to use manifest cursor." },
+    },
+    required: ["launchId"],
+  },
 };
 
 export const CAMELCASE_HANDLER_NAMES = {
@@ -233,6 +257,7 @@ export const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_parallel: "copilotSubagentParallel",
   copilot_subagent_resume: "copilotSubagentResume",
   copilot_subagent_set_title: "copilotSubagentSetTitle",
+  copilot_subagent_read_messages: "copilotSubagentReadMessages",
 };
 
 // D4.1: explicit allow-list of tool names that MUST be stripped from a child's
@@ -244,11 +269,13 @@ export const PUBLIC_SPAWNING_TOOL_NAMES = new Set([
   "copilot_subagent_resume",
   "copilot_subagent_set_title",
   "copilot_subagent_list_agents",
+  "copilot_subagent_read_messages",
   "copilotSubagentLaunch",
   "copilotSubagentParallel",
   "copilotSubagentResume",
   "copilotSubagentSetTitle",
   "copilotSubagentListAgents",
+  "copilotSubagentReadMessages",
 ]);
 
 // D2.1: name constant only (runtime tool def lives inline in extension.mjs).

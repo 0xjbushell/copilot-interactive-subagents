@@ -18,6 +18,7 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   "packages/copilot-interactive-subagents/extension/lib/utils.mjs",
   "packages/copilot-interactive-subagents/extension/lib/validation.mjs",
   "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/read-messages.mjs",
   "packages/copilot-interactive-subagents/extension/extension.mjs",
 ];
 
