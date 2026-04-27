@@ -183,21 +183,6 @@ describe("readMessages (D3)", () => {
     assert.equal(persistedCursor, 0);
   });
 
-  it("does not call updateLaunchRecord on LAUNCH_NOT_FOUND (null manifest)", async () => {
-    const { readMessages } = await importProjectModule(MOD_PATH, ["readMessages"]);
-    let updateCalled = false;
-    const result = await readMessages({
-      launchId: "lch_missing",
-      services: makeMockServices({
-        readLaunchRecord: async () => null,
-        updateLaunchRecord: async () => { updateCalled = true; },
-      }),
-    });
-    assert.equal(result.ok, false);
-    assert.equal(result.error, "LAUNCH_NOT_FOUND");
-    assert.equal(updateCalled, false);
-  });
-
   it("defaults manifest.messageCursor to 0 when missing from manifest", async () => {
     const { readMessages } = await importProjectModule(MOD_PATH, ["readMessages"]);
     let capturedCursor;

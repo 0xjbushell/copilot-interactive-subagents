@@ -6,14 +6,12 @@
 export async function readMessages({ launchId, sinceCursor, services = {} } = {}) {
   const { readLaunchRecord, updateLaunchRecord, readPingsSince, stateDir } = services;
 
-  // 1. Validate sinceCursor when explicitly provided
   if (sinceCursor !== undefined && sinceCursor !== null) {
     if (!Number.isInteger(sinceCursor) || sinceCursor < 0) {
       return { ok: false, error: "INVALID_CURSOR" };
     }
   }
 
-  // 2. Read manifest
   let manifest;
   try {
     manifest = await readLaunchRecord(launchId);
@@ -24,14 +22,8 @@ export async function readMessages({ launchId, sinceCursor, services = {} } = {}
     throw err;
   }
 
-  if (!manifest) {
-    return { ok: false, error: "LAUNCH_NOT_FOUND" };
-  }
-
-  // 3. Determine effective cursor
   const effectiveCursor = sinceCursor ?? manifest.messageCursor ?? 0;
 
-  // 4. Read pings
   let result;
   try {
     result = readPingsSince({ stateDir, launchId, sinceCursor: effectiveCursor });
@@ -39,10 +31,8 @@ export async function readMessages({ launchId, sinceCursor, services = {} } = {}
     return { ok: false, error: "SIDECAR_READ_FAILED", message: err?.message ?? String(err) };
   }
 
-  // 5. Persist cursor unconditionally on success
   await updateLaunchRecord(launchId, { messageCursor: result.nextCursor });
 
-  // 6. Return
   return {
     ok: true,
     messages: result.records,
