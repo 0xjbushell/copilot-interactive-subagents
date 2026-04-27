@@ -14,7 +14,7 @@ function validateMessage(message) {
   return typeof message === "string" && message.trim().length > 0 && message.length <= MAX_MESSAGE_BYTES;
 }
 
-export async function pollForReply({ launchId, manifest, sendStartedCursor, awaitReplyTimeoutMs, services }) {
+async function pollForReply({ launchId, manifest, sendStartedCursor, awaitReplyTimeoutMs, services }) {
   const { readPingsSince, updateLaunchRecord, probeSessionLiveness, stateDir, now, sleep } = services;
 
   const deadline = now() + awaitReplyTimeoutMs;

@@ -2,9 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { importProjectModule } from "../helpers/red-harness.mjs";
 
-const { sendMessage, pollForReply } = await importProjectModule(
+const { sendMessage } = await importProjectModule(
   "packages/copilot-interactive-subagents/extension/lib/send.mjs",
-  ["sendMessage", "pollForReply"],
+  ["sendMessage"],
 );
 
 function makeServices(overrides = {}) {
