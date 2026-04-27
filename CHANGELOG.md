@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-04-27
+
+Minor release. Adds an opt-in `model` argument to all subagent launch tools so the parent agent (or the user steering it) can pin which copilot model the child uses.
+
+### ✨ Features
+
+- **`model` parameter on `copilot_subagent_launch`, `copilot_subagent_parallel` (per-launch item), and `copilot_subagent_resume`.** Forwarded to the child as `--model <model>` (e.g. `gpt-5.2`, `claude-opus-4.7`). Optional — when omitted the child copilot picks its own default. Persisted on the launch manifest as `model`, so `copilot_subagent_resume` reuses the original launch's model unless an override is passed.
+- Model values are JSON-stringified into the runner script, so unsafe characters can't escape the JS args literal or the shell wrapper.
+
+### 🧹 Internal
+
+- 9 new unit tests (`test/unit/model-arg.test.mjs`) cover schema, plan threading, runner-script flag insertion (default + custom agent), omission semantics, and escape-safety.
+- Manifest schema (`createLaunchRecord`) gained a nullable `model` field.
+- Quality gates green: 291/291 unit tests, CRAP 165/165 ≤ 8, mutation 70/70 (100%).
+
 ## [2.0.4] — 2026-04-27
 
 Patch release. Fixes two production bugs causing pane leaks and tool-call timeouts in long-running subagent sessions.

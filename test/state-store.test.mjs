@@ -55,6 +55,7 @@ describe("launch state persistence", () => {
       pingHistory: [],
       lastExitType: null,
       sidecarPath: null,
+      model: null,
     });
   });
 
@@ -110,6 +111,7 @@ describe("launch state persistence", () => {
       pingHistory: [],
       lastExitType: null,
       sidecarPath: null,
+      model: null,
     });
   });
 

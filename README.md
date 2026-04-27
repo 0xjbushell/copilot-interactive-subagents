@@ -374,7 +374,8 @@ Request:
   "awaitCompletion": true,
   "interactive": false,
   "fork": { "copilotSessionId": "parent-uuid" },
-  "closePaneOnCompletion": true
+  "closePaneOnCompletion": true,
+  "model": "gpt-5.2"
 }
 ```
 
@@ -435,7 +436,8 @@ Request:
   "launches": [
     {
       "agentIdentifier": "reviewer-a",
-      "task": "Inspect alpha."
+      "task": "Inspect alpha.",
+      "model": "gpt-5.2"
     },
     {
       "agentIdentifier": "reviewer-b",
@@ -505,7 +507,8 @@ Request:
 {
   "launchId": "launch-001",
   "awaitCompletion": false,
-  "task": "please continue with the next step"
+  "task": "please continue with the next step",
+  "model": "gpt-5.2"
 }
 ```
 

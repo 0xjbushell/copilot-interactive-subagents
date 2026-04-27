@@ -52,7 +52,8 @@ Call with an exact `agentIdentifier` and the task text you want the child to exe
   "awaitCompletion": true,
   "interactive": false,
   "fork": { "copilotSessionId": "parent-uuid" },
-  "closePaneOnCompletion": true
+  "closePaneOnCompletion": true,
+  "model": "gpt-5.2"
 }
 ```
 
@@ -98,7 +99,8 @@ Use a single backend for the entire batch.
   "launches": [
     {
       "agentIdentifier": "reviewer-a",
-      "task": "Inspect alpha and summarize findings."
+      "task": "Inspect alpha and summarize findings.",
+      "model": "gpt-5.2"
     },
     {
       "agentIdentifier": "reviewer-b",
@@ -153,7 +155,8 @@ Resume from `launchId`, `resumeReference`, or `resumePointer`. Optional `task` d
     "launchId": "launch-001"
   },
   "awaitCompletion": false,
-  "task": "please continue with the next step"
+  "task": "please continue with the next step",
+  "model": "gpt-5.2"
 }
 ```
 

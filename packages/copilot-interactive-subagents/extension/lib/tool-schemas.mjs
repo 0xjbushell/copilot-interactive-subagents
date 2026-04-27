@@ -32,6 +32,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     requestShape: {
       agentIdentifier: "string",
       task: "string",
+      model: "string (optional copilot model identifier, e.g. 'gpt-5.2'; forwarded as --model)",
       backend: "cmux|zellij|tmux (optional; defaults to zellij when available, falling back to tmux)",
       awaitCompletion: "boolean (optional, default true)",
       interactive: "boolean (optional, default false — use -i flag, pane stays open)",
@@ -55,7 +56,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
     description: "Launch multiple exact-name agents in one shared backend.",
     requestShape: {
       launches:
-        "Array<{ agentIdentifier: string, task: string, backend?: cmux|zellij|tmux, awaitCompletion?: boolean, interactive?: boolean, fork?: { launchId | copilotSessionId }, closePaneOnCompletion?: boolean }>",
+        "Array<{ agentIdentifier: string, task: string, model?: string, backend?: cmux|zellij|tmux, awaitCompletion?: boolean, interactive?: boolean, fork?: { launchId | copilotSessionId }, closePaneOnCompletion?: boolean }>",
       backend: "cmux|zellij|tmux (optional shared backend override; defaults to zellij when available)",
       awaitCompletion: "boolean (optional shared default)",
     },
@@ -73,6 +74,7 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       launchId: "string (or resumeReference/resumePointer)",
       awaitCompletion: "boolean (optional, default true)",
       task: "string (optional follow-up instruction; empty string === omitted, no extra prompt delivered)",
+      model: "string (optional model override; defaults to the model recorded on the original launch)",
     },
     resultShape: {
       launchId: "string",
@@ -123,6 +125,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     properties: {
       agentIdentifier: { type: "string", description: "Exact built-in or custom agent identifier." },
       task: { type: "string", description: "Task text for the child agent." },
+      model: { type: "string", description: "Optional copilot model identifier (e.g. 'gpt-5.2', 'claude-opus-4.7'). Forwarded to the child as `--model <model>`. Defaults to whatever the child's copilot installation picks." },
       backend: { type: "string", enum: ["cmux", "zellij", "tmux"], description: "Pane backend; prefer zellij when available, falling back to tmux" },
       awaitCompletion: { type: "boolean" },
       interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
@@ -152,6 +155,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
           properties: {
             agentIdentifier: { type: "string" },
             task: { type: "string" },
+            model: { type: "string", description: "Optional copilot model identifier; forwarded as --model to the child." },
             backend: { type: "string", enum: ["cmux", "zellij", "tmux"], description: "Pane backend; prefer zellij when available, falling back to tmux" },
             awaitCompletion: { type: "boolean" },
             interactive: { type: "boolean", description: "Launch in interactive mode (-i flag, pane stays open)." },
@@ -200,6 +204,7 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
         type: "string",
         description: "Optional follow-up instruction delivered to the resumed child as a new launch prompt. Use this to respond to a caller_ping or to extend the child's work. Extension does NOT auto-prepend prior ping context — caller crafts the full task string.",
       },
+      model: { type: "string", description: "Optional copilot model identifier override. Defaults to the model recorded on the original launch manifest." },
     },
   },
   copilot_subagent_set_title: {

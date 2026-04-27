@@ -78,6 +78,7 @@ export function createLaunchRecord({
   pingHistory = [],
   lastExitType = null,
   sidecarPath = null,
+  model = null,
 } = {}) {
   const validatedLaunchId = assertValidLaunchId(launchId);
   return {
@@ -100,6 +101,7 @@ export function createLaunchRecord({
     pingHistory: Array.isArray(pingHistory) ? [...pingHistory] : [],
     lastExitType: lastExitType ?? null,
     sidecarPath: sidecarPath ?? null,
+    model: model ?? null,
   };
 }
 
