@@ -3,7 +3,7 @@ name: using-copilot-interactive-subagents
 description: "Teach Copilot agents how to delegate work through the copilot-interactive-subagents extension. Use when you want visible pane-backed subagents, tmux or attached-zellij delegation, exact agent launching, parallel pane fan-out, resume/handoff, session forking, interactive collaboration, or child-to-parent pings via copilot_subagent_* tools."
 ---
 
-# Using copilot-interactive-subagents (v2.0)
+# Using copilot-interactive-subagents (v2.1)
 
 Use this skill when the repository has the `copilot-interactive-subagents` extension available and the task benefits from visible pane-backed delegation instead of hidden background execution.
 
@@ -11,10 +11,10 @@ Use this skill when the repository has the `copilot-interactive-subagents` exten
 
 ## Capabilities
 
-- **5 parent tools**: `list_agents`, `launch`, `parallel`, `resume`, `set_title`
-- **2 child-only tools**: `subagent_done`, `caller_ping` (only available inside child sessions)
+- **8 parent tools**: `list_agents`, `launch`, `parallel`, `resume`, `set_title`, `send`, `read_messages`
+- **3 child-only tools**: `subagent_done`, `caller_ping`, `message` (only available inside child sessions)
 - **3 backends**: cmux, tmux, zellij
-- **Persistent sessions**: every launch gets a Copilot session UUID, stored in a launch manifest (v3)
+- **Persistent sessions**: every launch gets a Copilot session UUID, stored in a launch manifest (v4)
 - **Interactive mode**: launch with `interactive: true` to keep the pane open for user collaboration
 - **Resume**: continue a completed session with full context, optionally injecting a follow-up `task`
 - **Fork**: branch a parent session's context into a new child launch
@@ -29,6 +29,7 @@ Use this skill when the repository has the `copilot-interactive-subagents` exten
 - Parallel aggregation treats `ping` as non-failure: `[success, ping]` → `success`; `[failure, ping]` → `partial-success`.
 - Child sessions only see `subagent_done` and `caller_ping` — the parent spawning tools are stripped to prevent runaway recursion.
 - Manifest v3 is a **hard cutover**; v2 launches cannot be resumed. Re-launch instead.
+- Manifest v4 is a **hard cutover** from v3; v3 launches cannot use dialogue tools. Re-launch instead.
 
 ## Workflow
 
@@ -147,6 +148,50 @@ Resume with a follow-up task (respond to a ping, or steer a completed session):
 { "title": "Phase 2: Testing", "backend": "zellij", "paneId": "pane:5" }
 ```
 
+### copilot_subagent_send
+
+Send a message to a running child agent via mux send-keys with bracketed-paste wrapping. Use when the child is still running (interactive mode, mid-turn).
+
+Fire-and-forget:
+
+```json
+{ "launchId": "abc-123", "message": "Start the migration now." }
+```
+
+With `awaitReply` (synchronous request-response):
+
+```json
+{
+  "launchId": "abc-123",
+  "message": "What is the current test count?",
+  "awaitReply": true,
+  "awaitReplyTimeoutMs": 10000
+}
+```
+
+Result shape:
+
+```
+ok, delivered, paneId,
+reply: null                       // fire-and-forget
+reply: { message, writtenAt, cursor }  // awaitReply success
+```
+
+### copilot_subagent_read_messages
+
+Read child→parent messages (pings) with cursor management. Each call returns only messages written since the last cursor position, then advances the cursor in the manifest.
+
+```json
+{ "launchId": "abc-123" }
+```
+
+Result shape:
+
+```
+ok, messages: [{ type, message, writtenAt, cursor }],
+nextCursor, hasMore
+```
+
 ## Child-Only Tools
 
 These tools only exist inside a child session (spawned by this extension). The parent never sees them, and children cannot call any of the `copilot_subagent_*` parent tools — the parent tool list is filtered at registration time.
@@ -174,6 +219,94 @@ Pause work and notify the parent that you need input. After calling, end your tu
 - Parent observes `status: "ping"`, `ping: { message }`, and can call `resume({ launchId, task: "<answer>" })` to continue you with the answer injected as a follow-up instruction.
 - Same `launchId` supports ping→resume cycles more than once.
 
+### copilot_subagent_message
+
+Send a message to the parent agent. Available only inside child sessions. The message is appended to pings.jsonl for the parent to read via `_read_messages` or `awaitReply`.
+
+```json
+{ "message": "The test suite has 42 passing tests." }
+```
+
+- `message` is required and must be non-empty.
+- After calling, continue your work — unlike `caller_ping`, this does NOT end your session.
+
+## Multi-turn Dialogue
+
+v2.1 adds three tools for real-time parent↔child dialogue without ending the child's session.
+
+### Tools
+
+| Tool | Direction | Effect |
+|------|-----------|--------|
+| `copilot_subagent_send` | parent → child | Delivers text via mux send-keys with bracketed paste |
+| `copilot_subagent_read_messages` | parent ← child | Reads child pings with cursor management |
+| `copilot_subagent_message` | child → parent | Appends a message to pings.jsonl (child continues running) |
+
+### When to Use What
+
+- **`_send` vs `resume`**: Use `_send` when the child is still running (interactive mode, mid-turn). Use `resume` when the child has completed (called `subagent_done` or `caller_ping`).
+- **`awaitReply:true` vs separate `_read_messages`**: Use `awaitReply:true` for synchronous request-response patterns (send prompt, wait for reply). Use separate `_read_messages` for asynchronous patterns (check for messages without sending).
+- **`_message` vs `caller_ping`**: Use `_message` (child tool) for inline replies during work — the child continues running. Use `caller_ping` to pause work and wait for parent to resume you.
+
+### Examples
+
+**Send with awaitReply (synchronous dialogue):**
+
+```json
+{
+  "launchId": "abc-123",
+  "message": "What is the current test count?",
+  "awaitReply": true,
+  "awaitReplyTimeoutMs": 10000
+}
+```
+
+Response:
+
+```json
+{ "ok": true, "delivered": true, "paneId": "%5", "reply": { "message": "42 tests passing", "writtenAt": "...", "cursor": 128 } }
+```
+
+**Fire-and-forget send:**
+
+```json
+{ "launchId": "abc-123", "message": "Start the migration now." }
+```
+
+Response:
+
+```json
+{ "ok": true, "delivered": true, "paneId": "%5", "reply": null }
+```
+
+**Read messages (poll for child pings):**
+
+```json
+{ "launchId": "abc-123" }
+```
+
+Response:
+
+```json
+{ "ok": true, "launchId": "abc-123", "messages": [], "cursor": 256 }
+```
+
+**Child sends message (inside child session only):**
+
+```json
+{ "message": "Migration complete. 15 tables updated." }
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+### Manifest v4
+
+v2.1 upgrades the manifest from v3 to v4 (hard cutover). v3 launches cannot use dialogue tools — re-launch.
+
 ## Error Codes
 
 | Code | Meaning | Action |
@@ -187,9 +320,13 @@ Pause work and notify the parent that you need input. After calling, end your tu
 | `LAUNCH_NOT_FOUND` | No manifest for this launchId | Session may have been cleaned up |
 | `SESSION_ACTIVE` | Session is still running or locked | Wait for completion or use a new launch |
 | `FORK_SOURCE_NOT_FOUND` | Fork source session doesn't exist | Check launchId/copilotSessionId |
-| `MANIFEST_VERSION_UNSUPPORTED` | Launch manifest is not v3 | Hard cutover; re-launch |
+| `MANIFEST_VERSION_UNSUPPORTED` | Launch manifest is not v4 | Hard cutover; re-launch |
 | `STATE_DIR_MISSING` | Child tool ran without `COPILOT_SUBAGENT_STATE_DIR` | Don't invoke children outside this extension's launch path |
 | `TOOL_TIMEOUT` | Tool exceeded 90s | Retry; investigate if recurrent |
+| `INVALID_MESSAGE` | Message empty, not a string, or exceeds 64 KiB | Fix the message content |
+| `PANE_DEAD` | Target pane no longer exists | Child session has ended; check results |
+| `AWAIT_REPLY_TIMEOUT` | awaitReply timed out waiting for child response | Increase timeout or check child is responsive |
+| `SIDECAR_READ_FAILED` | Failed to read pings.jsonl | Check file permissions |
 
 ## Operating Notes
 
@@ -201,4 +338,5 @@ Pause work and notify the parent that you need input. After calling, end your tu
 - Pane cleanup is automatic for autonomous launches (`closePaneOnCompletion` defaults to `true`).
 - Interactive launches keep the pane open (`closePaneOnCompletion` defaults to `false`).
 - Children cannot spawn further children — the parent spawning tools are filtered out of child tool lists.
+- Pings (child messages) are stored at `<workspace>/.copilot-interactive-subagents/pings/<launchId>.jsonl`.
 
