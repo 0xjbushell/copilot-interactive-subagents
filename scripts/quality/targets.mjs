@@ -17,6 +17,7 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs",
   "packages/copilot-interactive-subagents/extension/lib/utils.mjs",
   "packages/copilot-interactive-subagents/extension/lib/validation.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
   "packages/copilot-interactive-subagents/extension/extension.mjs",
 ];
 
@@ -267,8 +268,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "state-metadata-version-3",
     file: "packages/copilot-interactive-subagents/extension/lib/state.mjs",
-    from: "export const METADATA_VERSION = 3;",
-    to: "export const METADATA_VERSION = 2;",
+    from: "export const METADATA_VERSION = 4;",
+    to: "export const METADATA_VERSION = 3;",
   },
   {
     id: "state-version-assert-code",
@@ -449,6 +450,30 @@ const DEFAULT_TARGETED_MUTANTS = [
     file: "packages/copilot-interactive-subagents/extension/extension.mjs",
     from: 'systemMessage = { mode: "append", content: CHILD_LIFECYCLE_PROMPT };',
     to: 'systemMessage = { mode: "replace", content: CHILD_LIFECYCLE_PROMPT };',
+  },
+  {
+    id: "ping-sidecar-version",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: "const PING_VERSION = 1;",
+    to: "const PING_VERSION = 2;",
+  },
+  {
+    id: "ping-sidecar-dirname",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: 'export const PING_SIDECAR_DIRNAME = "pings";',
+    to: 'export const PING_SIDECAR_DIRNAME = "exit";',
+  },
+  {
+    id: "ping-sidecar-record-type",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: '    type: "message",',
+    to: '    type: "ping",',
+  },
+  {
+    id: "ping-sidecar-skip-future-version",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: "    if (parsed.version > PING_VERSION) {",
+    to: "    if (parsed.version < PING_VERSION) {",
   },
 ];
 

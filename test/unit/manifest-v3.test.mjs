@@ -22,7 +22,7 @@ describe("D1.2 manifest v3 contract", () => {
       ["createLaunchRecord", "METADATA_VERSION"],
     );
 
-    assert.equal(METADATA_VERSION, 3);
+    assert.equal(METADATA_VERSION, 4);
 
     const record = createLaunchRecord({
       launchId: "x1",
@@ -33,7 +33,7 @@ describe("D1.2 manifest v3 contract", () => {
       requestedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    assert.equal(record.metadataVersion, 3);
+    assert.equal(record.metadataVersion, 4);
     assert.deepEqual(record.pingHistory, []);
     assert.equal(record.lastExitType, null);
     assert.equal(record.sidecarPath, null);
@@ -73,7 +73,7 @@ describe("D1.2 manifest v3 contract", () => {
       sidecarPath: "/tmp/exit/roundtrip.json",
     }));
     const read = await store.readLaunchRecord("roundtrip");
-    assert.equal(read.metadataVersion, 3);
+    assert.equal(read.metadataVersion, 4);
     assert.deepEqual(read.pingHistory, [{ ts: "t1", message: "first" }]);
     assert.equal(read.lastExitType, "ping");
     assert.equal(read.sidecarPath, "/tmp/exit/roundtrip.json");
@@ -122,7 +122,7 @@ describe("D1.2 manifest v3 contract", () => {
       ["assertSupportedMetadataVersion"],
     );
     // No throw.
-    assertSupportedMetadataVersion({ metadataVersion: 3 });
+    assertSupportedMetadataVersion({ metadataVersion: 4 });
   });
 
   it("planResumeSession throws MANIFEST_VERSION_UNSUPPORTED for state-index path with v2 entry", async (t) => {

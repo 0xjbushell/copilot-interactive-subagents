@@ -53,7 +53,7 @@ describe("single pane-backed launch orchestration", () => {
       sessionId: null,
       summary: null,
       exitCode: null,
-      metadataVersion: 3,
+      metadataVersion: 4,
       copilotSessionId: plan.copilotSessionId,
       interactive: false,
       fork: null,
@@ -191,7 +191,7 @@ describe("single pane-backed launch orchestration", () => {
       summary: "Reviewed failing tests and proposed a fix",
       summarySource: "assistant-message",
       exitCode: 0,
-      metadataVersion: 3,
+      metadataVersion: 4,
       resumePointer: {
         launchId: stored.launchId,
         sessionId: "session-123",
@@ -1001,7 +1001,7 @@ describe("single pane-backed launch orchestration", () => {
       status: "running",
       summary: null,
       exitCode: null,
-      metadataVersion: 3,
+      metadataVersion: 4,
       copilotSessionId: stored.copilotSessionId,
       interactive: false,
       fork: null,
@@ -1011,6 +1011,7 @@ describe("single pane-backed launch orchestration", () => {
       lastExitType: null,
       sidecarPath: null,
       model: null,
+      messageCursor: 0,
     });
   });
 });

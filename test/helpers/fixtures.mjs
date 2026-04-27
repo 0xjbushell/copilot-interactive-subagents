@@ -49,13 +49,14 @@ export function createManifestV2(overrides = {}) {
     status: overrides.status ?? "pending",
     summary: overrides.summary ?? null,
     exitCode: overrides.exitCode ?? null,
-    metadataVersion: overrides.metadataVersion ?? 3,
+    metadataVersion: overrides.metadataVersion ?? 4,
     copilotSessionId: overrides.copilotSessionId ?? "test-uuid-0000-0000-0000-000000000001",
     interactive: overrides.interactive ?? false,
     fork: overrides.fork ?? null,
     closePaneOnCompletion: overrides.closePaneOnCompletion ?? true,
     eventsBaseline: overrides.eventsBaseline ?? null,
     model: overrides.model ?? null,
+    messageCursor: overrides.messageCursor ?? 0,
   };
 }
 
