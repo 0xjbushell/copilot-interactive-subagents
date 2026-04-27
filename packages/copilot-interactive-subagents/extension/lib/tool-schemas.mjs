@@ -10,6 +10,7 @@ export const PUBLIC_TOOL_NAMES = [
   "copilot_subagent_resume",
   "copilot_subagent_set_title",
   "copilot_subagent_read_messages",
+  "copilot_subagent_send",
 ];
 
 export const PUBLIC_TOOL_DEFINITIONS = [
@@ -118,6 +119,20 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       messages: "Array<{ type, message, writtenAt, cursor }>",
       nextCursor: "integer",
       hasMore: "boolean",
+    },
+  },
+  {
+    name: "copilot_subagent_send",
+    description: "Send a message to a live child agent's pane via mux send-keys.",
+    requestShape: {
+      launchId: "string",
+      message: "string (max 64 KiB)",
+    },
+    resultShape: {
+      ok: "boolean",
+      delivered: "boolean",
+      paneId: "string|null",
+      reply: "object|null",
     },
   },
 ];
@@ -249,6 +264,15 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     },
     required: ["launchId"],
   },
+  copilot_subagent_send: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      launchId: { type: "string", description: "Launch ID of the child to send to." },
+      message: { type: "string", description: "Message to send (max 64 KiB, non-empty)." },
+    },
+    required: ["launchId", "message"],
+  },
 };
 
 export const CAMELCASE_HANDLER_NAMES = {
@@ -258,6 +282,7 @@ export const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_resume: "copilotSubagentResume",
   copilot_subagent_set_title: "copilotSubagentSetTitle",
   copilot_subagent_read_messages: "copilotSubagentReadMessages",
+  copilot_subagent_send: "copilotSubagentSend",
 };
 
 // D4.1: explicit allow-list of tool names that MUST be stripped from a child's
@@ -276,6 +301,8 @@ export const PUBLIC_SPAWNING_TOOL_NAMES = new Set([
   "copilotSubagentSetTitle",
   "copilotSubagentListAgents",
   "copilotSubagentReadMessages",
+  "copilot_subagent_send",
+  "copilotSubagentSend",
 ]);
 
 // D2.1: name constant only (runtime tool def lives inline in extension.mjs).

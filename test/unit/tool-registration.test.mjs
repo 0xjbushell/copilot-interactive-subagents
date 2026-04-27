@@ -32,7 +32,7 @@ async function captureRegisteredTools(env) {
 }
 
 describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
-  it("exports the exact 12-name set from tool-schemas.mjs", async () => {
+  it("exports the exact 14-name set from tool-schemas.mjs", async () => {
     const { PUBLIC_SPAWNING_TOOL_NAMES } = await importProjectModule(
       "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs",
       ["PUBLIC_SPAWNING_TOOL_NAMES"],
@@ -41,17 +41,19 @@ describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
       "copilot_subagent_launch", "copilot_subagent_parallel",
       "copilot_subagent_resume", "copilot_subagent_set_title",
       "copilot_subagent_list_agents", "copilot_subagent_read_messages",
+      "copilot_subagent_send",
       "copilotSubagentLaunch", "copilotSubagentParallel",
       "copilotSubagentResume", "copilotSubagentSetTitle",
       "copilotSubagentListAgents", "copilotSubagentReadMessages",
+      "copilotSubagentSend",
     ];
-    assert.equal(PUBLIC_SPAWNING_TOOL_NAMES.size, 12);
+    assert.equal(PUBLIC_SPAWNING_TOOL_NAMES.size, 14);
     for (const name of expected) {
       assert.ok(PUBLIC_SPAWNING_TOOL_NAMES.has(name), `expected ${name} in set`);
     }
   });
 
-  it("PARENT (no LAUNCH_ID): all 12 spawning tools registered (snake + camelCase)", async () => {
+  it("PARENT (no LAUNCH_ID): all 14 spawning tools registered (snake + camelCase)", async () => {
     const tools = await captureRegisteredTools({
       COPILOT_SUBAGENT_LAUNCH_ID: null,
       COPILOT_SUBAGENT_SESSION_ID: null,
@@ -61,9 +63,11 @@ describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
       "copilot_subagent_launch", "copilot_subagent_parallel",
       "copilot_subagent_resume", "copilot_subagent_set_title",
       "copilot_subagent_list_agents", "copilot_subagent_read_messages",
+      "copilot_subagent_send",
       "copilotSubagentLaunch", "copilotSubagentParallel",
       "copilotSubagentResume", "copilotSubagentSetTitle",
       "copilotSubagentListAgents", "copilotSubagentReadMessages",
+      "copilotSubagentSend",
     ];
     for (const n of expected) {
       assert.ok(names.has(n), `parent should expose ${n}, got: ${[...names].join(", ")}`);
@@ -129,5 +133,26 @@ describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
     const names = tools.map((t) => t.name);
     assert.ok(!names.includes("copilot_subagent_read_messages"), "child must NOT see copilot_subagent_read_messages");
     assert.ok(!names.includes("copilotSubagentReadMessages"), "child must NOT see copilotSubagentReadMessages");
+  });
+
+  it("CHILD: copilot_subagent_send is NOT exposed", async () => {
+    const tools = await captureRegisteredTools({
+      COPILOT_SUBAGENT_LAUNCH_ID: "child-id",
+      COPILOT_SUBAGENT_STATE_DIR: "/mock/state",
+      COPILOT_SUBAGENT_SESSION_ID: null,
+    });
+    const names = tools.map((t) => t.name);
+    assert.ok(!names.includes("copilot_subagent_send"), "child must NOT see copilot_subagent_send");
+    assert.ok(!names.includes("copilotSubagentSend"), "child must NOT see copilotSubagentSend");
+  });
+
+  it("PARENT: copilot_subagent_send IS exposed", async () => {
+    const tools = await captureRegisteredTools({
+      COPILOT_SUBAGENT_LAUNCH_ID: null,
+      COPILOT_SUBAGENT_SESSION_ID: null,
+    });
+    const names = tools.map((t) => t.name);
+    assert.ok(names.includes("copilot_subagent_send"), "parent must expose copilot_subagent_send");
+    assert.ok(names.includes("copilotSubagentSend"), "parent must expose copilotSubagentSend");
   });
 });

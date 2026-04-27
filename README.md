@@ -594,6 +594,30 @@ Result:
 }
 ```
 
+### `copilot_subagent_send`
+
+Send a message to a live child agent's pane via mux send-keys.
+
+Request:
+
+```json
+{
+  "launchId": "lch_abc123",
+  "message": "Please also check the auth module"
+}
+```
+
+Result:
+
+```json
+{
+  "ok": true,
+  "delivered": true,
+  "paneId": "%42",
+  "reply": null
+}
+```
+
 ## Safety and behavior notes
 
 - agent targeting is exact-name only

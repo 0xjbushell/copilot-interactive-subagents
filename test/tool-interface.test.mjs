@@ -37,6 +37,7 @@ describe("generic tool interface and operator handoff", () => {
       "copilot_subagent_resume",
       "copilot_subagent_set_title",
       "copilot_subagent_read_messages",
+      "copilot_subagent_send",
     ]);
     assert.deepEqual(
       PUBLIC_TOOL_DEFINITIONS.map((definition) => definition.name),
@@ -123,6 +124,8 @@ describe("generic tool interface and operator handoff", () => {
     assert.equal(handlers.copilotSubagentParallel, handlers.copilot_subagent_parallel);
     assert.equal(handlers.copilotSubagentResume, handlers.copilot_subagent_resume);
     assert.equal(handlers.copilotSubagentSetTitle, handlers.copilot_subagent_set_title);
+    assert.equal(handlers.copilotSubagentReadMessages, handlers.copilot_subagent_read_messages);
+    assert.equal(handlers.copilotSubagentSend, handlers.copilot_subagent_send);
   });
 
   it("registers SDK tools through joinSession for live extension discovery", async () => {
@@ -155,12 +158,13 @@ describe("generic tool interface and operator handoff", () => {
           copilot_subagent_resume: async () => ({ ok: true }),
           copilot_subagent_set_title: async () => ({ ok: true }),
           copilot_subagent_read_messages: async () => ({ ok: true }),
+          copilot_subagent_send: async () => ({ ok: true }),
         };
       },
     });
 
     assert.equal(result, session);
-    assert.equal(joinConfig.tools.length, 12);
+    assert.equal(joinConfig.tools.length, 14);
     assert.ok(joinConfig.tools.some((tool) => tool.name === "copilot_subagent_launch"));
     assert.ok(joinConfig.tools.some((tool) => tool.name === "copilotSubagentLaunch"));
   });
@@ -340,6 +344,8 @@ describe("generic tool interface and operator handoff", () => {
       "copilot_subagent_parallel",
       "copilot_subagent_resume",
       "copilot_subagent_set_title",
+      "copilot_subagent_read_messages",
+      "copilot_subagent_send",
     ]) {
       assert.match(readme, new RegExp(toolName));
       assert.match(skillsDoc, new RegExp(toolName));

@@ -19,6 +19,7 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   "packages/copilot-interactive-subagents/extension/lib/validation.mjs",
   "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
   "packages/copilot-interactive-subagents/extension/lib/read-messages.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/send.mjs",
   "packages/copilot-interactive-subagents/extension/extension.mjs",
 ];
 
@@ -475,6 +476,42 @@ const DEFAULT_TARGETED_MUTANTS = [
     file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
     from: "    if (parsed.version > PING_VERSION) {",
     to: "    if (parsed.version < PING_VERSION) {",
+  },
+  {
+    id: "send-invalid-message-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "INVALID_MESSAGE" };',
+    to: '    return { ok: false, error: "LAUNCH_NOT_FOUND" };',
+  },
+  {
+    id: "send-launch-not-found-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "LAUNCH_NOT_FOUND" };',
+    to: '    return { ok: false, error: "INVALID_MESSAGE" };',
+  },
+  {
+    id: "send-backend-unavailable-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "BACKEND_UNAVAILABLE" };',
+    to: '    return { ok: false, error: "PANE_DEAD" };',
+  },
+  {
+    id: "send-pane-dead-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "PANE_DEAD" };',
+    to: '    return { ok: false, error: "BACKEND_UNAVAILABLE" };',
+  },
+  {
+    id: "send-bracketed-paste-open",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: 'const BRACKET_OPEN = "\\x1b[200~";',
+    to: 'const BRACKET_OPEN = "";',
+  },
+  {
+    id: "send-delivered-flag",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: "  return { ok: true, delivered: true, paneId: manifest.paneId, reply: null };",
+    to: "  return { ok: true, delivered: false, paneId: manifest.paneId, reply: null };",
   },
 ];
 

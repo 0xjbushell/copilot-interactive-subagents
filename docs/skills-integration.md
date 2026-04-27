@@ -211,6 +211,28 @@ Returns:
 }
 ```
 
+### `copilot_subagent_send`
+
+Send a message to a live child agent's pane via mux send-keys with bracketed-paste wrapping. Fire-and-forget — does not wait for a reply.
+
+```json
+{
+  "launchId": "lch_abc123",
+  "message": "Please also check the auth module"
+}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "delivered": true,
+  "paneId": "%42",
+  "reply": null
+}
+```
+
 ## Handoff guidance for skills
 
 - Keep prompts generic: the extension only needs an exact agent identifier and task text.

@@ -30,6 +30,8 @@ import {
 import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
 import { appendPing, readPingsSince as readPingsSinceFromLib } from "./lib/ping-sidecar.mjs";
 import { readMessages } from "./lib/read-messages.mjs";
+import { sendMessage } from "./lib/send.mjs";
+import { probeSessionLiveness as probeSessionLivenessFromMux } from "./lib/mux.mjs";
 import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_TOOL_DEFINITIONS,
@@ -353,6 +355,44 @@ async function handleSetTitle(request, services) {
   });
 }
 
+async function handleSend(request, services) {
+  const { launchId, message } = request;
+  const stateStore = services.createStateStore(request);
+  return sendMessage({
+    launchId,
+    message,
+    services: {
+      readLaunchRecord: (id) => stateStore.readLaunchRecord(id),
+      probeBackendAvailable: async (backend) => {
+        try {
+          const { spawnSync } = await import("node:child_process");
+          if (backend === "tmux") {
+            return spawnSync("tmux", ["info"], { stdio: "ignore" }).status === 0;
+          }
+          if (backend === "zellij") {
+            return spawnSync("zellij", ["--version"], { stdio: "ignore" }).status === 0;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      },
+      probeSessionLiveness: (opts) => probeSessionLivenessFromMux(opts),
+      runBackendSendKeys: async ({ backend, paneId, payload }) => {
+        if (backend === "tmux") {
+          await runDefaultBackendCommand({ request, backend, args: ["send-keys", "-t", paneId, "-l", payload] });
+          await runDefaultBackendCommand({ request, backend, args: ["send-keys", "-t", paneId, "Enter"] });
+        } else if (backend === "zellij") {
+          const numericId = (await import("./lib/utils.mjs")).stripPanePrefix(paneId);
+          await runDefaultBackendCommand({ request, backend, args: ["action", "write-chars", "--pane-id", numericId, `${payload}\n`] });
+        } else {
+          throw new Error(`Unsupported backend: ${backend}`);
+        }
+      },
+    },
+  });
+}
+
 async function handleReadMessages(request, services) {
   const { launchId, sinceCursor } = request;
   const stateStore = services.createStateStore(request);
@@ -512,6 +552,9 @@ export async function createExtensionHandlers(overrides = {}) {
     },
     async copilot_subagent_read_messages(request = {}) {
       return handleReadMessages(request, services);
+    },
+    async copilot_subagent_send(request = {}) {
+      return handleSend(request, services);
     },
   };
 
