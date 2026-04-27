@@ -510,8 +510,26 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "send-delivered-flag",
     file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
-    from: "  return { ok: true, delivered: true, paneId: manifest.paneId, reply: null };",
-    to: "  return { ok: true, delivered: false, paneId: manifest.paneId, reply: null };",
+    from: "    return { ok: true, delivered: true, paneId: manifest.paneId, reply: null };",
+    to: "    return { ok: true, delivered: false, paneId: manifest.paneId, reply: null };",
+  },
+  {
+    id: "send-await-reply-timeout-error",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '  return { ok: false, error: "AWAIT_REPLY_TIMEOUT", delivered: true, paneId: manifest.paneId };',
+    to: '  return { ok: false, error: "PANE_DEAD", delivered: true, paneId: manifest.paneId };',
+  },
+  {
+    id: "send-await-reply-cursor-advance",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: "      await updateLaunchRecord(launchId, { messageCursor: firstReply.cursor });",
+    to: "      void 0;",
+  },
+  {
+    id: "send-await-reply-uses-send-cursor",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: "  const sendStartedCursor = awaitReply ? getPingsFileSize(launchId) : 0;",
+    to: "  const sendStartedCursor = 0;",
   },
 ];
 

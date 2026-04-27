@@ -1,5 +1,6 @@
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
 
 import {
   listRuntimeAgents as defaultListRuntimeAgents,
@@ -358,13 +359,17 @@ async function handleSetTitle(request, services) {
 }
 
 async function handleSend(request, services) {
-  const { launchId, message } = request;
+  const { launchId, message, awaitReply, awaitReplyTimeoutMs } = request;
   const stateStore = services.createStateStore(request);
+  const stateDir = resolveStateDir({ projectRoot: services.projectRoot?.() ?? process.cwd() });
   return sendMessage({
     launchId,
     message,
+    awaitReply,
+    awaitReplyTimeoutMs,
     services: {
       readLaunchRecord: (id) => stateStore.readLaunchRecord(id),
+      updateLaunchRecord: (id, updates) => stateStore.updateLaunchRecord(id, updates),
       probeBackendAvailable: (backend) => {
         try {
           if (backend === "tmux") {
@@ -389,6 +394,14 @@ async function handleSend(request, services) {
           throw new Error(`Unsupported backend: ${backend}`);
         }
       },
+      getPingsFileSize: (id) => {
+        const filePath = path.join(stateDir, "pings", `${id}.jsonl`);
+        try { return statSync(filePath).size; } catch { return 0; }
+      },
+      readPingsSince: (args) => readPingsSinceFromLib(args),
+      stateDir,
+      now: () => Date.now(),
+      sleep: (ms) => new Promise(r => setTimeout(r, ms)),
     },
   });
 }

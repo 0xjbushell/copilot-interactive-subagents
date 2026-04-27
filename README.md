@@ -596,9 +596,9 @@ Result:
 
 ### `copilot_subagent_send`
 
-Send a message to a live child agent's pane via mux send-keys.
+Send a message to a live child agent's pane via mux send-keys. Set `awaitReply: true` to wait for the child to respond via `copilot_subagent_message`.
 
-Request:
+Fire-and-forget (default):
 
 ```json
 {
@@ -615,6 +615,43 @@ Result:
   "delivered": true,
   "paneId": "%42",
   "reply": null
+}
+```
+
+With awaitReply:
+
+```json
+{
+  "launchId": "lch_abc123",
+  "message": "What is the status of the auth module?",
+  "awaitReply": true,
+  "awaitReplyTimeoutMs": 30000
+}
+```
+
+Result (on reply):
+
+```json
+{
+  "ok": true,
+  "delivered": true,
+  "paneId": "%42",
+  "reply": {
+    "message": "Auth module looks good, 3 tests passing",
+    "writtenAt": "2026-01-01T00:00:00Z",
+    "cursor": 256
+  }
+}
+```
+
+Result (on timeout):
+
+```json
+{
+  "ok": false,
+  "error": "AWAIT_REPLY_TIMEOUT",
+  "delivered": true,
+  "paneId": "%42"
 }
 ```
 
@@ -643,6 +680,8 @@ Common machine-readable codes include:
 - `RESUME_ATTACH_FAILED`
 - `TITLE_TARGET_INVALID`
 - `TITLE_UNSUPPORTED`
+- `AWAIT_REPLY_TIMEOUT`
+- `PANE_DEAD` (during awaitReply poll)
 
 ## Limitations
 

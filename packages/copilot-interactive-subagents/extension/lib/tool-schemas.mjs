@@ -123,16 +123,18 @@ export const PUBLIC_TOOL_DEFINITIONS = [
   },
   {
     name: "copilot_subagent_send",
-    description: "Send a message to a live child agent's pane via mux send-keys.",
+    description: "Send a message to a live child agent's pane via mux send-keys. Set awaitReply:true to wait for the child to respond via copilot_subagent_message.",
     requestShape: {
       launchId: "string",
       message: "string (max 64 KiB)",
+      awaitReply: "boolean (optional, default false)",
+      awaitReplyTimeoutMs: "integer (optional, default 30000)",
     },
     resultShape: {
       ok: "boolean",
       delivered: "boolean",
       paneId: "string|null",
-      reply: "object|null",
+      reply: "object|null ({ message, writtenAt, cursor } when awaitReply succeeds)",
     },
   },
 ];
@@ -270,6 +272,8 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     properties: {
       launchId: { type: "string", description: "Launch ID of the child to send to." },
       message: { type: "string", description: "Message to send (max 64 KiB, non-empty)." },
+      awaitReply: { type: "boolean", description: "Wait for the child to reply via copilot_subagent_message. Default false." },
+      awaitReplyTimeoutMs: { type: "integer", description: "Max milliseconds to wait for reply. Default 30000." },
     },
     required: ["launchId", "message"],
   },
