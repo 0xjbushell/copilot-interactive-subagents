@@ -28,6 +28,7 @@ import {
   defaultStartBackendForRuntime,
 } from "./lib/backend-ops.mjs";
 import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
+import { appendPing } from "./lib/ping-sidecar.mjs";
 import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_TOOL_DEFINITIONS,
@@ -56,6 +57,7 @@ const CHILD_LIFECYCLE_PROMPT = [
   "You are a subagent spawned by a parent Copilot agent. Your session has a defined lifecycle:",
   "- When you have completed the user's task, OR you cannot make further progress, call `subagent_done` with a brief summary of what you did or learned.",
   "- If you need clarification or input from the parent before continuing, call `caller_ping` with your question and end your turn.",
+  "- To send an in-flight note to the parent without ending your turn, call `copilot_subagent_message`. This is distinct from `caller_ping` (which terminates your session).",
   "- The pane you are running in will close automatically when you exit. The parent can resume this session at any time and send a follow-up task — so calling `subagent_done` is recoverable.",
   "- Do not call `subagent_done` while you are still actively working — only when the work is genuinely done or blocked.",
 ].join("\n");
@@ -619,6 +621,38 @@ export async function registerExtensionSession(options = {}) {
           ok: true,
           message: "Session is terminating. Do not call further tools. End your turn.",
         };
+      },
+    });
+
+    tools.push({
+      name: "copilot_subagent_message",
+      description:
+        "Send a non-exiting message to the parent. Unlike caller_ping (lifecycle — session ends) " +
+        "or subagent_done (terminal), this tool appends a note and returns immediately so you can keep working.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "The message to send to the parent (max 64 KiB, non-empty).",
+          },
+        },
+        required: ["message"],
+      },
+      handler: ({ message } = {}) => {
+        if (typeof message !== "string" || message.trim().length === 0 || message.length > 65536) {
+          return { ok: false, error: "INVALID_MESSAGE" };
+        }
+        try {
+          const result = appendPing({
+            stateDir: resolveChildStateDir(),
+            launchId: process.env.COPILOT_SUBAGENT_LAUNCH_ID,
+            message,
+          });
+          return { ok: true, writtenAt: result.writtenAt };
+        } catch (err) {
+          return { ok: false, error: "SIDECAR_WRITE_FAILED", message: err?.message ?? String(err) };
+        }
       },
     });
   }

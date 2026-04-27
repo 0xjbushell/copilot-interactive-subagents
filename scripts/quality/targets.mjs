@@ -382,8 +382,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "subagent-done-return-message",
     file: "packages/copilot-interactive-subagents/extension/extension.mjs",
-    from: '          message: "Session is terminating. Do not call further tools. End your turn.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
-    to: '          message: "Task marked complete. Session ending.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
+    from: '          message: "Session is terminating. Do not call further tools. End your turn.",\n        };\n      },\n    });\n\n    tools.push({\n      name: "copilot_subagent_message",',
+    to: '          message: "Task marked complete. Session ending.",\n        };\n      },\n    });\n\n    tools.push({\n      name: "copilot_subagent_message",',
   },
   {
     id: "resume-d25-ping-cleanup-gate",

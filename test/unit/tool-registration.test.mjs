@@ -99,7 +99,7 @@ describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
     assert.ok(!names.includes("copilotSubagentLaunch"));
   });
 
-  it("CHILD: child-only tools (caller_ping, subagent_done) ARE present", async () => {
+  it("CHILD: child-only tools (caller_ping, subagent_done, copilot_subagent_message) ARE present", async () => {
     const tools = await captureRegisteredTools({
       COPILOT_SUBAGENT_LAUNCH_ID: "child-id",
       COPILOT_SUBAGENT_STATE_DIR: "/tmp/state",
@@ -108,5 +108,15 @@ describe("D4.1: PUBLIC_SPAWNING_TOOL_NAMES filter", () => {
     const names = tools.map((t) => t.name);
     assert.ok(names.includes("caller_ping"), "caller_ping must remain registered for children");
     assert.ok(names.includes("subagent_done"), "subagent_done must remain registered for children");
+    assert.ok(names.includes("copilot_subagent_message"), "copilot_subagent_message must be registered for children");
+  });
+
+  it("PARENT: copilot_subagent_message is NOT exposed", async () => {
+    const tools = await captureRegisteredTools({
+      COPILOT_SUBAGENT_LAUNCH_ID: null,
+      COPILOT_SUBAGENT_SESSION_ID: null,
+    });
+    const names = tools.map((t) => t.name);
+    assert.ok(!names.includes("copilot_subagent_message"), "parent must NOT see copilot_subagent_message");
   });
 });
