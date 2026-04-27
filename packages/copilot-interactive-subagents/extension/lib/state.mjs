@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { normalizeOptionalText, normalizeExitCode } from "./utils.mjs";
 
-export const METADATA_VERSION = 3;
+export const METADATA_VERSION = 4;
 export const LAUNCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const SUPPORTED_BACKENDS = ["cmux", "tmux", "zellij"];
 const DEFAULT_STORE_DIRECTORY = path.join(".copilot-interactive-subagents", "launches");
@@ -79,6 +79,7 @@ export function createLaunchRecord({
   lastExitType = null,
   sidecarPath = null,
   model = null,
+  messageCursor = 0,
 } = {}) {
   const validatedLaunchId = assertValidLaunchId(launchId);
   return {
@@ -102,6 +103,7 @@ export function createLaunchRecord({
     lastExitType: lastExitType ?? null,
     sidecarPath: sidecarPath ?? null,
     model: model ?? null,
+    messageCursor: messageCursor ?? 0,
   };
 }
 

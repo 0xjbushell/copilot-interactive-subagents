@@ -16,6 +16,12 @@ import { stripPanePrefix } from "./utils.mjs";
 
 const execFileAsync = promisify(execFile);
 
+const TASK_LIFECYCLE_SUFFIX = "\n\n" + [
+  "---",
+  "IMPORTANT: You are a subagent. When your work is complete, you MUST call the `subagent_done` tool with a summary. " +
+  "If you need input from the caller, call `caller_ping`. Do not just stop responding — the parent is waiting for your signal.",
+].join("\n");
+
 export function shellEscape(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
@@ -234,7 +240,8 @@ export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = 
 
   const copilotBinary = request.copilotBinary ?? runtimeServices.copilotBinary ?? "copilot";
   const agentIdentifierB64 = encodeBase64(agentIdentifier);
-  const taskB64 = encodeBase64(task ?? "");
+  const taskWithLifecycle = (task ?? "") + TASK_LIFECYCLE_SUFFIX;
+  const taskB64 = encodeBase64(taskWithLifecycle);
   const useDefaultCopilotAgent = agentIdentifier === "github-copilot";
   const promptFlag = interactive ? "-i" : "-p";
   const suppressStats = interactive ? "" : ' "-s",';

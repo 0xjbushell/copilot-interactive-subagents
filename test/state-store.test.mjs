@@ -46,7 +46,7 @@ describe("launch state persistence", () => {
       status: "pending",
       summary: null,
       exitCode: null,
-      metadataVersion: 3,
+      metadataVersion: 4,
       copilotSessionId: null,
       interactive: false,
       fork: null,
@@ -56,6 +56,7 @@ describe("launch state persistence", () => {
       lastExitType: null,
       sidecarPath: null,
       model: null,
+      messageCursor: 0,
     });
   });
 
@@ -102,7 +103,7 @@ describe("launch state persistence", () => {
       status: "success",
       summary: "Completed the requested review",
       exitCode: 0,
-      metadataVersion: 3,
+      metadataVersion: 4,
       copilotSessionId: null,
       interactive: false,
       fork: null,
@@ -112,6 +113,7 @@ describe("launch state persistence", () => {
       lastExitType: null,
       sidecarPath: null,
       model: null,
+      messageCursor: 0,
     });
   });
 

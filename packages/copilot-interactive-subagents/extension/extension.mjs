@@ -1,4 +1,6 @@
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
 
 import {
   listRuntimeAgents as defaultListRuntimeAgents,
@@ -16,7 +18,7 @@ import { resumeSubagent as defaultContinueResume } from "./lib/resume.mjs";
 import { createStateStore as buildDefaultStateStore } from "./lib/state.mjs";
 import { createStateIndex as buildDefaultStateIndex } from "./lib/state-index.mjs";
 import { setSubagentTitle as defaultContinueSetTitle } from "./lib/titles.mjs";
-import { uniqueStable } from "./lib/utils.mjs";
+import { uniqueStable, stripPanePrefix } from "./lib/utils.mjs";
 import {
   resolveCommandPath,
   createDefaultAgentLaunchCommand,
@@ -26,8 +28,13 @@ import {
   defaultReadChildSessionState,
   defaultAttachBackendForRuntime,
   defaultStartBackendForRuntime,
+  runDefaultBackendCommand,
 } from "./lib/backend-ops.mjs";
 import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
+import { appendPing, readPingsSince as readPingsSinceFromLib } from "./lib/ping-sidecar.mjs";
+import { readMessages } from "./lib/read-messages.mjs";
+import { sendMessage } from "./lib/send.mjs";
+import { probeSessionLiveness as probeSessionLivenessFromMux } from "./lib/mux.mjs";
 import {
   PUBLIC_TOOL_NAMES,
   PUBLIC_TOOL_DEFINITIONS,
@@ -53,11 +60,34 @@ export { PUBLIC_TOOL_NAMES, PUBLIC_TOOL_DEFINITIONS, PUBLIC_TOOL_PARAMETER_SCHEM
 const DEFAULT_EXPLICIT_BUILT_IN_IDENTIFIERS = ["github-copilot"];
 
 const CHILD_LIFECYCLE_PROMPT = [
-  "You are a subagent spawned by a parent Copilot agent. Your session has a defined lifecycle:",
-  "- When you have completed the user's task, OR you cannot make further progress, call `subagent_done` with a brief summary of what you did or learned.",
-  "- If you need clarification or input from the parent before continuing, call `caller_ping` with your question and end your turn.",
-  "- The pane you are running in will close automatically when you exit. The parent can resume this session at any time and send a follow-up task — so calling `subagent_done` is recoverable.",
-  "- Do not call `subagent_done` while you are still actively working — only when the work is genuinely done or blocked.",
+  "## You are a subagent",
+  "",
+  "You are running inside a managed pane. A parent agent launched you and is waiting for your result. You MUST follow this lifecycle — the parent cannot proceed until you do.",
+  "",
+  "### Required: call `subagent_done` when finished",
+  "",
+  "When your work is complete — or you are blocked and cannot continue — you MUST call `subagent_done` as your final tool call. This is NOT optional. Without it the parent hangs indefinitely and your work is lost.",
+  "",
+  "```",
+  'subagent_done({ summary: "Implemented X. All tests pass." })',
+  "```",
+  "",
+  "After calling `subagent_done`, end your turn immediately. Do not call any more tools.",
+  "",
+  "### Decision tree — which tool to call",
+  "",
+  "| Situation | Tool | What happens |",
+  "|-----------|------|--------------|",
+  "| Work is done or you are blocked | `subagent_done` | Session ends, pane closes, parent gets your summary |",
+  "| You need input from the parent to continue | `caller_ping` | Session ends, parent resumes you with an answer |",
+  "| You want to send a progress update mid-work | `copilot_subagent_message` | Message delivered, you keep working |",
+  "",
+  "### Rules",
+  "",
+  "- Always call `subagent_done` when finished. Never just stop responding.",
+  "- Do not call `subagent_done` while you are still actively working — only when genuinely done or blocked.",
+  "- The parent can resume this session later, so `subagent_done` is recoverable — do not hesitate to call it.",
+  "- The pane will close automatically after you exit.",
 ].join("\n");
 
 const DEFAULT_SUPPORTED_STARTUP = {
@@ -350,6 +380,69 @@ async function handleSetTitle(request, services) {
   });
 }
 
+async function handleSend(request, services) {
+  const { launchId, message, awaitReply, awaitReplyTimeoutMs } = request;
+  const stateStore = services.createStateStore(request);
+  const stateDir = resolveStateDir({ projectRoot: services.projectRoot?.() ?? process.cwd() });
+  return sendMessage({
+    launchId,
+    message,
+    awaitReply,
+    awaitReplyTimeoutMs,
+    services: {
+      readLaunchRecord: (id) => stateStore.readLaunchRecord(id),
+      updateLaunchRecord: (id, updates) => stateStore.updateLaunchRecord(id, updates),
+      probeBackendAvailable: (backend) => {
+        try {
+          if (backend === "tmux") {
+            return spawnSync("tmux", ["info"], { stdio: "ignore" }).status === 0;
+          }
+          if (backend === "zellij") {
+            return spawnSync("zellij", ["--version"], { stdio: "ignore" }).status === 0;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      },
+      probeSessionLiveness: (opts) => probeSessionLivenessFromMux(opts),
+      runBackendSendKeys: async ({ backend, paneId, payload }) => {
+        if (backend === "tmux") {
+          await runDefaultBackendCommand({ request, backend, args: ["send-keys", "-t", paneId, "-l", payload] });
+          await runDefaultBackendCommand({ request, backend, args: ["send-keys", "-t", paneId, "Enter"] });
+        } else if (backend === "zellij") {
+          await runDefaultBackendCommand({ request, backend, args: ["action", "write-chars", "--pane-id", stripPanePrefix(paneId), `${payload}\n`] });
+        } else {
+          throw new Error(`Unsupported backend: ${backend}`);
+        }
+      },
+      getPingsFileSize: (id) => {
+        const filePath = path.join(stateDir, "pings", `${id}.jsonl`);
+        try { return statSync(filePath).size; } catch { return 0; }
+      },
+      readPingsSince: (args) => readPingsSinceFromLib(args),
+      stateDir,
+      now: () => Date.now(),
+      sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+    },
+  });
+}
+
+async function handleReadMessages(request, services) {
+  const { launchId, sinceCursor } = request;
+  const stateStore = services.createStateStore(request);
+  return readMessages({
+    launchId,
+    sinceCursor,
+    services: {
+      readLaunchRecord: (id) => stateStore.readLaunchRecord(id),
+      updateLaunchRecord: (id, updates) => stateStore.updateLaunchRecord(id, updates),
+      readPingsSince: readPingsSinceFromLib,
+      stateDir: resolveStateDir({ projectRoot: services.projectRoot?.() ?? process.cwd() }),
+    },
+  });
+}
+
 function buildHandlerAliases(handlers) {
   return Object.fromEntries(
     Object.entries(CAMELCASE_HANDLER_NAMES).map(([namespacedName, camelCaseName]) => [
@@ -492,6 +585,12 @@ export async function createExtensionHandlers(overrides = {}) {
     async copilot_subagent_set_title(request = {}) {
       return handleSetTitle(request, services);
     },
+    async copilot_subagent_read_messages(request = {}) {
+      return handleReadMessages(request, services);
+    },
+    async copilot_subagent_send(request = {}) {
+      return handleSend(request, services);
+    },
   };
 
   return {
@@ -619,6 +718,38 @@ export async function registerExtensionSession(options = {}) {
           ok: true,
           message: "Session is terminating. Do not call further tools. End your turn.",
         };
+      },
+    });
+
+    tools.push({
+      name: "copilot_subagent_message",
+      description:
+        "Send a non-exiting message to the parent. Unlike caller_ping (lifecycle — session ends) " +
+        "or subagent_done (terminal), this tool appends a note and returns immediately so you can keep working.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "The message to send to the parent (max 64 KiB, non-empty).",
+          },
+        },
+        required: ["message"],
+      },
+      handler: ({ message } = {}) => {
+        if (typeof message !== "string" || message.trim().length === 0 || message.length > 65536) {
+          return { ok: false, error: "INVALID_MESSAGE" };
+        }
+        try {
+          const result = appendPing({
+            stateDir: resolveChildStateDir(),
+            launchId: process.env.COPILOT_SUBAGENT_LAUNCH_ID,
+            message,
+          });
+          return { ok: true, writtenAt: result.writtenAt };
+        } catch (err) {
+          return { ok: false, error: "SIDECAR_WRITE_FAILED", message: err?.message ?? String(err) };
+        }
       },
     });
   }

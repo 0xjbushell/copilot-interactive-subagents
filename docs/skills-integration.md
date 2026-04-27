@@ -187,6 +187,91 @@ Returns:
 }
 ```
 
+### `copilot_subagent_read_messages`
+
+Read new messages from a child agent since the last cursor position. Omit `sinceCursor` to resume from the manifest's stored cursor.
+
+```json
+{
+  "launchId": "lch_abc123",
+  "sinceCursor": 0
+}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "messages": [
+    { "type": "message", "message": "Progress update", "writtenAt": "2026-01-01T00:00:00Z", "cursor": 128 }
+  ],
+  "nextCursor": 128,
+  "hasMore": false
+}
+```
+
+### `copilot_subagent_send`
+
+Send a message to a live child agent's pane via mux send-keys with bracketed-paste wrapping. Set `awaitReply: true` to wait for the child to respond via `copilot_subagent_message`.
+
+Fire-and-forget (default):
+
+```json
+{
+  "launchId": "lch_abc123",
+  "message": "Please also check the auth module"
+}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "delivered": true,
+  "paneId": "%42",
+  "reply": null
+}
+```
+
+With awaitReply:
+
+```json
+{
+  "launchId": "lch_abc123",
+  "message": "What is the status of the auth module?",
+  "awaitReply": true,
+  "awaitReplyTimeoutMs": 30000
+}
+```
+
+Returns (on reply):
+
+```json
+{
+  "ok": true,
+  "delivered": true,
+  "paneId": "%42",
+  "reply": {
+    "message": "Auth module looks good, 3 tests passing",
+    "writtenAt": "2026-01-01T00:00:00Z",
+    "cursor": 256
+  }
+}
+```
+
+Returns (on timeout):
+
+```json
+{
+  "ok": false,
+  "error": "AWAIT_REPLY_TIMEOUT",
+  "delivered": true,
+  "paneId": "%42"
+}
+```
+
 ## Handoff guidance for skills
 
 - Keep prompts generic: the extension only needs an exact agent identifier and task text.
@@ -211,5 +296,7 @@ Agent Skills should branch on stable codes, not prose. Important codes include:
 - `RESUME_ATTACH_FAILED`
 - `TITLE_TARGET_INVALID`
 - `TITLE_UNSUPPORTED`
+- `AWAIT_REPLY_TIMEOUT`
+- `PANE_DEAD` (during awaitReply poll)
 
 Every validation failure includes human-readable `guidance` so skills can surface actionable operator handoff text without inventing their own remediation copy.

@@ -17,6 +17,9 @@ const DEFAULT_DETERMINISTIC_LOGIC_TARGETS = [
   "packages/copilot-interactive-subagents/extension/lib/tool-schemas.mjs",
   "packages/copilot-interactive-subagents/extension/lib/utils.mjs",
   "packages/copilot-interactive-subagents/extension/lib/validation.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/read-messages.mjs",
+  "packages/copilot-interactive-subagents/extension/lib/send.mjs",
   "packages/copilot-interactive-subagents/extension/extension.mjs",
 ];
 
@@ -267,8 +270,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "state-metadata-version-3",
     file: "packages/copilot-interactive-subagents/extension/lib/state.mjs",
-    from: "export const METADATA_VERSION = 3;",
-    to: "export const METADATA_VERSION = 2;",
+    from: "export const METADATA_VERSION = 4;",
+    to: "export const METADATA_VERSION = 3;",
   },
   {
     id: "state-version-assert-code",
@@ -381,8 +384,8 @@ const DEFAULT_TARGETED_MUTANTS = [
   {
     id: "subagent-done-return-message",
     file: "packages/copilot-interactive-subagents/extension/extension.mjs",
-    from: '          message: "Session is terminating. Do not call further tools. End your turn.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
-    to: '          message: "Task marked complete. Session ending.",\n        };\n      },\n    });\n  }\n\n  session = await joinSession',
+    from: '          message: "Session is terminating. Do not call further tools. End your turn.",\n        };\n      },\n    });\n\n    tools.push({\n      name: "copilot_subagent_message",',
+    to: '          message: "Task marked complete. Session ending.",\n        };\n      },\n    });\n\n    tools.push({\n      name: "copilot_subagent_message",',
   },
   {
     id: "resume-d25-ping-cleanup-gate",
@@ -449,6 +452,84 @@ const DEFAULT_TARGETED_MUTANTS = [
     file: "packages/copilot-interactive-subagents/extension/extension.mjs",
     from: 'systemMessage = { mode: "append", content: CHILD_LIFECYCLE_PROMPT };',
     to: 'systemMessage = { mode: "replace", content: CHILD_LIFECYCLE_PROMPT };',
+  },
+  {
+    id: "ping-sidecar-version",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: "const PING_VERSION = 1;",
+    to: "const PING_VERSION = 2;",
+  },
+  {
+    id: "ping-sidecar-dirname",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: 'export const PING_SIDECAR_DIRNAME = "pings";',
+    to: 'export const PING_SIDECAR_DIRNAME = "exit";',
+  },
+  {
+    id: "ping-sidecar-record-type",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: '    type: "message",',
+    to: '    type: "ping",',
+  },
+  {
+    id: "ping-sidecar-skip-future-version",
+    file: "packages/copilot-interactive-subagents/extension/lib/ping-sidecar.mjs",
+    from: "    if (parsed.version > PING_VERSION) {",
+    to: "    if (parsed.version < PING_VERSION) {",
+  },
+  {
+    id: "send-invalid-message-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "INVALID_MESSAGE" };',
+    to: '    return { ok: false, error: "LAUNCH_NOT_FOUND" };',
+  },
+  {
+    id: "send-launch-not-found-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "LAUNCH_NOT_FOUND" };',
+    to: '    return { ok: false, error: "INVALID_MESSAGE" };',
+  },
+  {
+    id: "send-backend-unavailable-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "BACKEND_UNAVAILABLE" };',
+    to: '    return { ok: false, error: "PANE_DEAD" };',
+  },
+  {
+    id: "send-pane-dead-gate",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '    return { ok: false, error: "PANE_DEAD" };',
+    to: '    return { ok: false, error: "BACKEND_UNAVAILABLE" };',
+  },
+  {
+    id: "send-bracketed-paste-open",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: 'const BRACKET_OPEN = "\\x1b[200~";',
+    to: 'const BRACKET_OPEN = "";',
+  },
+  {
+    id: "send-delivered-flag",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: "    return { ok: true, delivered: true, paneId: manifest.paneId, reply: null };",
+    to: "    return { ok: true, delivered: false, paneId: manifest.paneId, reply: null };",
+  },
+  {
+    id: "send-await-reply-timeout-error",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: '  return { ok: false, error: "AWAIT_REPLY_TIMEOUT", delivered: true, paneId: manifest.paneId };',
+    to: '  return { ok: false, error: "PANE_DEAD", delivered: true, paneId: manifest.paneId };',
+  },
+  {
+    id: "send-await-reply-cursor-advance",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: "      await updateLaunchRecord(launchId, { messageCursor: firstReply.cursor });",
+    to: "      void 0;",
+  },
+  {
+    id: "send-await-reply-uses-send-cursor",
+    file: "packages/copilot-interactive-subagents/extension/lib/send.mjs",
+    from: "  const sendStartedCursor = awaitReply ? getPingsFileSize(launchId) : 0;",
+    to: "  const sendStartedCursor = 0;",
   },
 ];
 

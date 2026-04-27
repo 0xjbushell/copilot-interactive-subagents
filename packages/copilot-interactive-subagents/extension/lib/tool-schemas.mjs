@@ -9,6 +9,8 @@ export const PUBLIC_TOOL_NAMES = [
   "copilot_subagent_parallel",
   "copilot_subagent_resume",
   "copilot_subagent_set_title",
+  "copilot_subagent_read_messages",
+  "copilot_subagent_send",
 ];
 
 export const PUBLIC_TOOL_DEFINITIONS = [
@@ -103,6 +105,36 @@ export const PUBLIC_TOOL_DEFINITIONS = [
       title: "string",
       applied: "boolean",
       source: "backend-command|runtime",
+    },
+  },
+  {
+    name: "copilot_subagent_read_messages",
+    description: "Read new messages from a child agent since the last cursor position.",
+    requestShape: {
+      launchId: "string",
+      sinceCursor: "integer (optional byte offset; omit to use manifest cursor)",
+    },
+    resultShape: {
+      ok: "boolean",
+      messages: "Array<{ type, message, writtenAt, cursor }>",
+      nextCursor: "integer",
+      hasMore: "boolean",
+    },
+  },
+  {
+    name: "copilot_subagent_send",
+    description: "Send a message to a live child agent's pane via mux send-keys. Set awaitReply:true to wait for the child to respond via copilot_subagent_message.",
+    requestShape: {
+      launchId: "string",
+      message: "string (max 64 KiB)",
+      awaitReply: "boolean (optional, default false)",
+      awaitReplyTimeoutMs: "integer (optional, default 30000)",
+    },
+    resultShape: {
+      ok: "boolean",
+      delivered: "boolean",
+      paneId: "string|null",
+      reply: "object|null ({ message, writtenAt, cursor } when awaitReply succeeds)",
     },
   },
 ];
@@ -225,6 +257,26 @@ export const PUBLIC_TOOL_PARAMETER_SCHEMAS = {
     },
     required: ["title"],
   },
+  copilot_subagent_read_messages: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      launchId: { type: "string", description: "Launch ID of the child to read messages from." },
+      sinceCursor: { type: "integer", description: "Byte offset to read from. Omit to use manifest cursor." },
+    },
+    required: ["launchId"],
+  },
+  copilot_subagent_send: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      launchId: { type: "string", description: "Launch ID of the child to send to." },
+      message: { type: "string", description: "Message to send (max 64 KiB, non-empty)." },
+      awaitReply: { type: "boolean", description: "Wait for the child to reply via copilot_subagent_message. Default false." },
+      awaitReplyTimeoutMs: { type: "integer", description: "Max milliseconds to wait for reply. Default 30000." },
+    },
+    required: ["launchId", "message"],
+  },
 };
 
 export const CAMELCASE_HANDLER_NAMES = {
@@ -233,6 +285,8 @@ export const CAMELCASE_HANDLER_NAMES = {
   copilot_subagent_parallel: "copilotSubagentParallel",
   copilot_subagent_resume: "copilotSubagentResume",
   copilot_subagent_set_title: "copilotSubagentSetTitle",
+  copilot_subagent_read_messages: "copilotSubagentReadMessages",
+  copilot_subagent_send: "copilotSubagentSend",
 };
 
 // D4.1: explicit allow-list of tool names that MUST be stripped from a child's
@@ -244,11 +298,15 @@ export const PUBLIC_SPAWNING_TOOL_NAMES = new Set([
   "copilot_subagent_resume",
   "copilot_subagent_set_title",
   "copilot_subagent_list_agents",
+  "copilot_subagent_read_messages",
   "copilotSubagentLaunch",
   "copilotSubagentParallel",
   "copilotSubagentResume",
   "copilotSubagentSetTitle",
   "copilotSubagentListAgents",
+  "copilotSubagentReadMessages",
+  "copilot_subagent_send",
+  "copilotSubagentSend",
 ]);
 
 // D2.1: name constant only (runtime tool def lives inline in extension.mjs).

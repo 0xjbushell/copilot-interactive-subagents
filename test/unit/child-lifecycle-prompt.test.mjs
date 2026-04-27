@@ -45,6 +45,8 @@ describe("Child-lifecycle system message (TIX-000059)", () => {
       "content must mention subagent_done");
     assert.ok(captured.systemMessage.content.includes("caller_ping"),
       "content must mention caller_ping");
+    assert.ok(captured.systemMessage.content.includes("copilot_subagent_message"),
+      "content must mention copilot_subagent_message for non-exiting dialogue");
     assert.ok(/resume|reopen/i.test(captured.systemMessage.content),
       "content must explain parent can resume so premature done is recoverable");
     assert.ok(/pane|exit|close/i.test(captured.systemMessage.content),

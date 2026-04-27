@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
+## [2.2.0]
+
+### Added
+- **Live parent↔child dialogue**: New tools for real-time communication between parent and child agents
+  - `copilot_subagent_message` — child sends non-exiting messages to parent via pings.jsonl
+  - `copilot_subagent_read_messages` — parent reads child messages with cursor-based pagination
+  - `copilot_subagent_send` — parent sends messages to child's pane via bracketed paste
+  - `copilot_subagent_send({ awaitReply: true })` — synchronous request/reply with cursor advance
+- **Manifest v4**: Added `messageCursor` field for dialogue cursor tracking (hard cutover from v3)
+- **Ping sidecar**: `appendPing` + `readPingsSince` for `pings.jsonl` I/O
+
 ## [2.1.0] — 2026-04-27
 
 Minor release. Adds an opt-in `model` argument to all subagent launch tools so the parent agent (or the user steering it) can pin which copilot model the child uses.
