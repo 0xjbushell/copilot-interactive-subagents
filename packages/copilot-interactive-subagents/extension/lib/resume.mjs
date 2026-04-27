@@ -213,6 +213,7 @@ async function openResumePane({ manifest, request, services }) {
       backend: manifest.backend,
       copilotSessionId: manifest.copilotSessionId,
       task: extraPrompt,
+      model: request.model ?? manifest.model ?? null,
       request,
     });
     return { paneId: result?.paneId ?? manifest.paneId, sessionId: result?.sessionId ?? null };
@@ -231,6 +232,7 @@ async function openResumePane({ manifest, request, services }) {
       task: extraPrompt,
       copilotSessionId: manifest.copilotSessionId,
       interactive: false,
+      model: request.model ?? manifest.model ?? null,
     });
     return {
       paneId: pane.paneId,

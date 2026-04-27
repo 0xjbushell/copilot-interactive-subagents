@@ -59,6 +59,7 @@ describe("single pane-backed launch orchestration", () => {
       fork: null,
       closePaneOnCompletion: true,
       eventsBaseline: null,
+      model: null,
     });
   });
 
@@ -1009,6 +1010,7 @@ describe("single pane-backed launch orchestration", () => {
       pingHistory: [],
       lastExitType: null,
       sidecarPath: null,
+      model: null,
     });
   });
 });

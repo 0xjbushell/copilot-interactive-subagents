@@ -55,6 +55,7 @@ export function createManifestV2(overrides = {}) {
     fork: overrides.fork ?? null,
     closePaneOnCompletion: overrides.closePaneOnCompletion ?? true,
     eventsBaseline: overrides.eventsBaseline ?? null,
+    model: overrides.model ?? null,
   };
 }
 

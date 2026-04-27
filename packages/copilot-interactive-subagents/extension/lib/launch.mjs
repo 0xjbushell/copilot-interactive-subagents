@@ -252,6 +252,7 @@ async function runChildLaunch({
     copilotSessionId: plan.copilotSessionId,
     launchId: plan.launchId,
     interactive: plan.interactive,
+    model: plan.model,
     request,
   });
 
@@ -428,6 +429,7 @@ export function planSingleLaunch({
     fork: request.fork ?? null,
     closePaneOnCompletion: request.closePaneOnCompletion ?? !interactive,
     eventsBaseline: null,
+    model: request.model ?? null,
   };
 }
 
