@@ -194,6 +194,7 @@ export async function createE2EHandlers({ backend, driver, workspacePath }) {
   const handlers = await createExtensionHandlers({
     enumerateCustomAgents: async () => [],
     createStateStore: () => createStateStore({ workspacePath }),
+    projectRoot: () => workspacePath,
     resolveLaunchBackend: async () => ({
       ok: true,
       selectedBackend: backend,

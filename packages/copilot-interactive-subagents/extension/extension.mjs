@@ -395,7 +395,7 @@ async function handleSend(request, services) {
       probeBackendAvailable: (backend) => {
         try {
           if (backend === "tmux") {
-            return spawnSync("tmux", ["info"], { stdio: "ignore" }).status === 0;
+            return spawnSync("tmux", ["list-sessions"], { stdio: "ignore" }).status === 0;
           }
           if (backend === "zellij") {
             return spawnSync("zellij", ["--version"], { stdio: "ignore" }).status === 0;
