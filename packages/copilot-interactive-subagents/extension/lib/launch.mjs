@@ -418,7 +418,7 @@ export function planSingleLaunch({
     launchAction: backendResolution.action,
     backendSessionName: backendResolution.sessionName ?? null,
     task: request.task,
-    awaitCompletion: request.awaitCompletion ?? !interactive,
+    awaitCompletion: false,
     requestedAt: now(),
     sessionId: null,
     summary: null,

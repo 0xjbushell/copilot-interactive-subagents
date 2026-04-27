@@ -32,7 +32,12 @@ export async function readMessages({ launchId, sinceCursor, services = {} } = {}
   const effectiveCursor = sinceCursor ?? manifest.messageCursor ?? 0;
 
   // 4. Read pings
-  const result = readPingsSince({ stateDir, launchId, sinceCursor: effectiveCursor });
+  let result;
+  try {
+    result = readPingsSince({ stateDir, launchId, sinceCursor: effectiveCursor });
+  } catch (err) {
+    return { ok: false, error: "SIDECAR_READ_FAILED", message: err?.message ?? String(err) };
+  }
 
   // 5. Persist cursor unconditionally on success
   await updateLaunchRecord(launchId, { messageCursor: result.nextCursor });

@@ -3,8 +3,6 @@
  * bracketed-paste wrapping. Pure orchestration — all I/O injected via services.
  */
 
-import { stripPanePrefix } from "./utils.mjs";
-
 const MAX_MESSAGE_BYTES = 65536; // 64 KiB
 const BRACKET_OPEN = "\x1b[200~";
 const BRACKET_CLOSE = "\x1b[201~";
@@ -26,8 +24,11 @@ export async function sendMessage({ launchId, message, services = {} } = {}) {
   let manifest;
   try {
     manifest = await readLaunchRecord(launchId);
-  } catch {
-    return { ok: false, error: "LAUNCH_NOT_FOUND" };
+  } catch (err) {
+    if (err?.code === "ENOENT" || err?.code === "LAUNCH_NOT_FOUND") {
+      return { ok: false, error: "LAUNCH_NOT_FOUND" };
+    }
+    throw err;
   }
 
   // 3. Probe backend available

@@ -26,6 +26,7 @@ import {
   defaultReadChildSessionState,
   defaultAttachBackendForRuntime,
   defaultStartBackendForRuntime,
+  runDefaultBackendCommand,
 } from "./lib/backend-ops.mjs";
 import { writeExitSidecar, resolveStateDir } from "./lib/exit-sidecar.mjs";
 import { appendPing, readPingsSince as readPingsSinceFromLib } from "./lib/ping-sidecar.mjs";
@@ -681,7 +682,7 @@ export async function registerExtensionSession(options = {}) {
         });
         return {
           ok: true,
-          message: "Session is terminating. Do not call further tools. End your turn.",
+          message: "Task marked complete. Session ending.",
         };
       },
     });

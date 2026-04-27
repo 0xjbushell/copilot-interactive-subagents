@@ -213,4 +213,17 @@ describe("readMessages (D3)", () => {
     });
     assert.equal(capturedCursor, 0);
   });
+
+  it("returns SIDECAR_READ_FAILED when readPingsSince throws", async () => {
+    const { readMessages } = await importProjectModule(MOD_PATH, ["readMessages"]);
+    const result = await readMessages({
+      launchId: "lch_test",
+      services: makeMockServices({
+        readPingsSince: () => { throw new Error("EACCES: permission denied"); },
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "SIDECAR_READ_FAILED");
+    assert.ok(result.message.includes("EACCES"));
+  });
 });

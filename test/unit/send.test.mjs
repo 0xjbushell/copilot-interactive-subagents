@@ -96,11 +96,13 @@ describe("sendMessage", () => {
   });
 
   it("returns LAUNCH_NOT_FOUND when readLaunchRecord throws", async () => {
+    const err = new Error("not found");
+    err.code = "ENOENT";
     const result = await sendMessage({
       launchId: "nonexistent",
       message: "hello",
       services: makeServices({
-        readLaunchRecord: async () => { throw new Error("not found"); },
+        readLaunchRecord: async () => { throw err; },
       }),
     });
     assert.deepEqual(result, { ok: false, error: "LAUNCH_NOT_FOUND" });
@@ -116,22 +118,26 @@ describe("sendMessage", () => {
   });
 
   it("checks INVALID_MESSAGE before LAUNCH_NOT_FOUND", async () => {
+    const err = new Error("not found");
+    err.code = "ENOENT";
     const result = await sendMessage({
       launchId: "nonexistent",
       message: "",
       services: makeServices({
-        readLaunchRecord: async () => { throw new Error("not found"); },
+        readLaunchRecord: async () => { throw err; },
       }),
     });
     assert.equal(result.error, "INVALID_MESSAGE");
   });
 
   it("checks LAUNCH_NOT_FOUND before BACKEND_UNAVAILABLE", async () => {
+    const err = new Error("not found");
+    err.code = "ENOENT";
     const result = await sendMessage({
       launchId: "nonexistent",
       message: "hello",
       services: makeServices({
-        readLaunchRecord: async () => { throw new Error("not found"); },
+        readLaunchRecord: async () => { throw err; },
         probeBackendAvailable: async () => false,
       }),
     });
@@ -172,5 +178,20 @@ describe("sendMessage", () => {
     });
     assert.equal(result.ok, true);
     assert.equal(result.delivered, true);
+  });
+
+  it("propagates non-ENOENT readLaunchRecord errors", async () => {
+    const err = new Error("MANIFEST_VERSION_UNSUPPORTED");
+    err.code = "MANIFEST_VERSION_UNSUPPORTED";
+    await assert.rejects(
+      () => sendMessage({
+        launchId: "launch-1",
+        message: "hello",
+        services: makeServices({
+          readLaunchRecord: async () => { throw err; },
+        }),
+      }),
+      (thrown) => thrown.code === "MANIFEST_VERSION_UNSUPPORTED",
+    );
   });
 });
