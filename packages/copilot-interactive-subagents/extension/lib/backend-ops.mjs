@@ -228,6 +228,9 @@ function buildLaunchEnvParts(request, { agentIdentifierB64, taskB64, copilotSess
   if (request.stateDir) {
     parts.push(`COPILOT_SUBAGENT_STATE_DIR=${shellEscape(request.stateDir)}`);
   }
+  if (request.runnerTimeoutMs) {
+    parts.push(`COPILOT_SUBAGENT_TIMEOUT_MS=${shellEscape(String(request.runnerTimeoutMs))}`);
+  }
   return parts;
 }
 
@@ -268,8 +271,23 @@ export function createDefaultAgentLaunchCommand(request = {}, runtimeServices = 
     useDefaultCopilotAgent
       ? `const args = [${resumeFlag} "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${modelFlag}${suppressStats}];`
       : `const args = [${resumeFlag} "--agent", decode("COPILOT_SUBAGENT_AGENT_B64"), "${promptFlag}", decode("COPILOT_SUBAGENT_TASK_B64"), "--allow-all-tools", "--allow-all-paths", "--allow-all-urls", "--no-ask-user",${modelFlag}${suppressStats}];`,
-    `const result = spawnSync(${JSON.stringify(copilotBinary)}, args, { stdio: "inherit" });`,
-    'const code = Number.isInteger(result.status) ? result.status : 1;',
+    `const timeout = Number(process.env.COPILOT_SUBAGENT_TIMEOUT_MS) || 0;`,
+    `const result = spawnSync(${JSON.stringify(copilotBinary)}, args, { stdio: "inherit", ...(timeout > 0 && { timeout }) });`,
+    'const code = result.signal ? 128 : (Number.isInteger(result.status) ? result.status : 1);',
+    'try {',
+    '  const fs = require("node:fs");',
+    '  const sDir = process.env.COPILOT_SUBAGENT_STATE_DIR;',
+    '  const sId = process.env.COPILOT_SUBAGENT_LAUNCH_ID;',
+    '  if (sDir && sId) {',
+    '    const fp = sDir + "/exit/" + sId + ".json";',
+    '    if (!fs.existsSync(fp)) {',
+    '      fs.mkdirSync(sDir + "/exit", { recursive: true });',
+    '      const rec = JSON.stringify({ version: 1, type: "done", writtenAt: new Date().toISOString(), launchId: sId, summary: null, exitCode: code });',
+    '      fs.writeFileSync(fp + ".tmp", rec);',
+    '      fs.renameSync(fp + ".tmp", fp);',
+    '    }',
+    '  }',
+    '} catch (_) {}',
     'process.stdout.write("\\n__SUBAGENT_DONE_" + code + "__\\n");',
     'closePaneOnce();',
     'process.exit(code);',
@@ -394,14 +412,42 @@ export async function defaultReadPaneOutput({ backend, request, runtimeServices 
   }
 
   if (backend === "zellij") {
-    const args = ["action", "dump-screen", "--pane-id", stripPanePrefix(context.paneId), "-f"];
+    const numericId = stripPanePrefix(context.paneId);
+    const args = ["action", "dump-screen", "--pane-id", numericId, "-f"];
     const result = await runDefaultBackendCommand({
       request: withoutZellijPaneRequest(request),
       runtimeServices,
       backend,
       args,
     });
-    return { output: result?.output ?? result?.stdout ?? "" };
+    const output = result?.output ?? result?.stdout ?? "";
+    if (output.trim()) return { output };
+
+    // dump-screen returns empty for non-focused zellij panes (e.g. zellij-inside-tmux).
+    // Fall back to list-panes to detect process exit — synthesize the sentinel so the
+    // monitor's existing completion flow triggers naturally.
+    try {
+      const listResult = await runDefaultBackendCommand({
+        request: withoutZellijPaneRequest(request),
+        runtimeServices,
+        backend,
+        args: ["action", "list-panes", "-j", "-c"],
+      });
+      const panes = JSON.parse(listResult?.stdout ?? listResult?.output ?? "[]");
+      if (Array.isArray(panes)) {
+        const paneNum = Number(numericId);
+        const match = panes.find((p) => p && !p.is_plugin && Number(p.id) === paneNum);
+        if (match?.exited === true) {
+          const exitCode = match.exit_status ?? 0;
+          return { output: `\n__SUBAGENT_DONE_${exitCode}__\n` };
+        }
+        if (!match) {
+          // Pane not found — already closed (closePaneOnce ran after process exited)
+          return { output: `\n__SUBAGENT_DONE_0__\n` };
+        }
+      }
+    } catch { /* list-panes unavailable — return empty output */ }
+    return { output };
   }
 
   const result = await runDefaultBackendCommand({

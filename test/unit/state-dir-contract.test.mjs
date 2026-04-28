@@ -31,7 +31,19 @@ describe("stateDir contract (D1.1 addendum)", () => {
         {},
         { agentIdentifier: "github-copilot", task: "go", copilotSessionId: null, interactive: false, backend: "tmux" },
       );
-      assert.ok(!cmd.includes("COPILOT_SUBAGENT_STATE_DIR"));
+      assert.ok(!cmd.match(/COPILOT_SUBAGENT_STATE_DIR=/), "env var should not be set when stateDir is unset");
+    });
+
+    it("includes COPILOT_SUBAGENT_TIMEOUT_MS when request.runnerTimeoutMs set", async () => {
+      const { createDefaultAgentLaunchCommand } = await importProjectModule(BACKEND_OPS, [
+        "createDefaultAgentLaunchCommand",
+      ]);
+      const cmd = createDefaultAgentLaunchCommand(
+        { launchId: "L1", stateDir: "/d", runnerTimeoutMs: 120000 },
+        {},
+        { agentIdentifier: "github-copilot", task: "go", copilotSessionId: null, interactive: false, backend: "tmux" },
+      );
+      assert.match(cmd, /COPILOT_SUBAGENT_TIMEOUT_MS=(?:'|")?120000(?:'|")?/);
     });
   });
 

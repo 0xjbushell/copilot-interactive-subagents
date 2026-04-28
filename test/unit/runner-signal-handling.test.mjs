@@ -36,4 +36,21 @@ describe("runner script signal handling (Bug A: orphan panes on signal exit)", (
     assert.ok(cmd.includes("__SUBAGENT_DONE_"), "sentinel still emitted");
     assert.ok(cmd.includes("ZELLIJ_PANE_ID"), "still reads ZELLIJ_PANE_ID for close target");
   });
+
+  it("runner reads COPILOT_SUBAGENT_TIMEOUT_MS for spawnSync timeout", async () => {
+    const { createDefaultAgentLaunchCommand } = await importProjectModule(EXT_PATH, ["createDefaultAgentLaunchCommand"]);
+    const cmd = createDefaultAgentLaunchCommand({}, {}, {
+      agentIdentifier: "github-copilot", task: "t", copilotSessionId: null, interactive: false, backend: "zellij",
+    });
+    assert.ok(cmd.includes("COPILOT_SUBAGENT_TIMEOUT_MS"), "runner should read timeout env var");
+    assert.ok(cmd.includes("timeout"), "runner should pass timeout to spawnSync options");
+  });
+
+  it("runner treats signal-killed process as exit code 128", async () => {
+    const { createDefaultAgentLaunchCommand } = await importProjectModule(EXT_PATH, ["createDefaultAgentLaunchCommand"]);
+    const cmd = createDefaultAgentLaunchCommand({}, {}, {
+      agentIdentifier: "github-copilot", task: "t", copilotSessionId: null, interactive: false, backend: "zellij",
+    });
+    assert.ok(cmd.includes("result.signal"), "runner should check result.signal for timeout kills");
+  });
 });

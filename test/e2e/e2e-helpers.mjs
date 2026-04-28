@@ -209,7 +209,17 @@ export async function createE2EHandlers({ backend, driver, workspacePath }) {
 
   const stateStore = createStateStore({ workspacePath });
 
-  return { handlers, stateStore };
+  // Wrap handlers to inject E2E-appropriate monitor timeout (5 min vs 2 min default)
+  // and a runner timeout so copilot processes that hang after session.shutdown get killed.
+  const E2E_MONITOR_ATTEMPTS = 600;
+  const E2E_RUNNER_TIMEOUT_MS = 120_000; // 2 minutes — copilot -p should finish well under this
+  const wrappedHandlers = {};
+  for (const [name, fn] of Object.entries(handlers)) {
+    wrappedHandlers[name] = (args) =>
+      fn({ maxMonitorAttempts: E2E_MONITOR_ATTEMPTS, runnerTimeoutMs: E2E_RUNNER_TIMEOUT_MS, ...args });
+  }
+
+  return { handlers: wrappedHandlers, stateStore };
 }
 
 // ---------------------------------------------------------------------------
